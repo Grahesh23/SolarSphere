@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
 import Customer from '../models/user-management/Customer.js';
+import User from '../models/user-management/User.js';
 import Project from '../models/project-management/Project.js';
 import RoofSurvey from '../models/project-management/RoofSurvey.js';
+import SolarConfiguration from '../models/project-management/SolarConfiguration.js';
 import Quotation from '../models/project-management/Quotation.js';
 import ApiError from '../utils/apiError.js';
 import { sendSuccess } from '../utils/apiResponse.js';
@@ -39,6 +41,33 @@ const publicDoc = (document) => {
 
 const makeCode = (prefix, id) => `${prefix}-${new Date().getFullYear()}-${id.toString().slice(-6).toUpperCase()}`;
 
+const buildBomFromConfiguration = (config) => {
+  if (!config?.bom || !Array.isArray(config.bom) || config.bom.length === 0) {
+    const capacity = Number(config?.capacity) || 3;
+    const systemType = config?.systemType || 'On-Grid';
+    const baseItems = [
+      { component: 'Solar Panel 540W', category: 'Panels', qty: Math.max(1, Math.ceil((capacity * 1000) / 540)), unitPrice: 16500 },
+      { component: systemType === 'On-Grid' ? 'Grid-Compatible Inverter' : 'Off-Grid Inverter', category: 'Inverter', qty: 1, unitPrice: systemType === 'On-Grid' ? 62000 : 30000 },
+      { component: 'Mounting Structure Kit', category: 'Mounting', qty: Math.max(1, Math.ceil(capacity)), unitPrice: 6000 },
+      { component: 'DC & AC Cabling', category: 'Cables', qty: 1, unitPrice: 12000 },
+      { component: 'Distribution Box & Protection', category: 'Protection', qty: 1, unitPrice: 8000 },
+      { component: 'Earthing & Safety Kit', category: 'Safety', qty: 1, unitPrice: 5000 },
+    ];
+    if (systemType === 'Off-Grid') {
+      baseItems.push({ component: 'Battery Bank 150Ah', category: 'Battery', qty: Math.max(1, Math.ceil(capacity)), unitPrice: 14500 });
+      baseItems.push({ component: 'MPPT Charge Controller', category: 'Charge Controller', qty: 1, unitPrice: 9000 });
+    }
+    return baseItems;
+  }
+
+  return config.bom.map((entry) => ({
+    component: entry.component,
+    category: entry.category,
+    qty: Number(entry.qty) || 1,
+    unitPrice: Number(entry.unitPrice) || 0,
+  }));
+};
+
 export const getWorkflow = [
   requireStaff,
   async (req, res, next) => {
@@ -55,6 +84,44 @@ export const getWorkflow = [
         surveys: surveys.map(publicDoc),
         quotations: quotations.map(publicDoc),
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+];
+
+export const createProject = [
+  requireStaff,
+  async (req, res, next) => {
+    try {
+      if (!['Admin', 'Sales'].includes(req.user.role)) {
+        return next(new ApiError(403, 'Only sales staff can create projects.'));
+      }
+
+      const { customerId, capacity, gridType, location, assignedTo } = req.body;
+      if (!customerId) return next(new ApiError(400, 'Customer is required to create a project.'));
+
+      const customer = await Customer.findById(customerId);
+      if (!customer) return next(new ApiError(404, 'Customer not found.'));
+
+      const project = new Project({
+        customerId: customer._id,
+        capacity: Number(capacity) || Number(customer.desiredCapacity) || 3,
+        gridType: gridType || 'On-Grid',
+        status: 'Enquiry',
+        assignedTo: assignedTo || req.user.name,
+        startDate: new Date().toISOString().slice(0, 10),
+        completion: 5,
+        location: location?.trim() || [customer.city, customer.state].filter(Boolean).join(', '),
+      });
+
+      project.code = makeCode('PRJ', project._id || new mongoose.Types.ObjectId());
+      await project.save();
+
+      customer.leadStatus = customer.leadStatus === 'New' || customer.leadStatus === 'Contacted' ? 'Project Created' : customer.leadStatus;
+      await customer.save();
+
+      return sendSuccess(res, 201, { project: publicDoc(project) }, 'Project created successfully.');
     } catch (error) {
       next(error);
     }
@@ -134,6 +201,26 @@ export const addFollowUp = [
   },
 ];
 
+export const getSurveyors = [
+  requireStaff,
+  async (req, res, next) => {
+    try {
+      const surveyors = await User.find({ role: 'Surveyor', isActive: true }).sort({ name: 1 }).select('name email phone role');
+      return sendSuccess(res, 200, {
+        surveyors: surveyors.map((user) => ({
+          id: String(user._id),
+          name: user.name,
+          email: user.email,
+          phone: user.phone || '',
+          role: user.role,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+];
+
 export const scheduleSurvey = [
   requireStaff,
   async (req, res, next) => {
@@ -180,6 +267,75 @@ export const scheduleSurvey = [
   },
 ];
 
+export const assignSurvey = [
+  requireStaff,
+  async (req, res, next) => {
+    try {
+      if (!['Admin', 'Sales'].includes(req.user.role)) {
+        return next(new ApiError(403, 'Only sales staff can assign a roof survey.'));
+      }
+
+      const { technicianId, scheduledDate, remarks, reassign } = req.body;
+      if (!scheduledDate) return next(new ApiError(400, 'Survey date is required.'));
+      if (!technicianId || !mongoose.Types.ObjectId.isValid(technicianId)) {
+        return next(new ApiError(400, 'A valid survey technician is required.'));
+      }
+
+      const technician = await User.findById(technicianId);
+      if (!technician || technician.role !== 'Surveyor') {
+        return next(new ApiError(400, 'Selected technician must be a registered surveyor.'));
+      }
+
+      const project = await Project.findById(req.params.projectId);
+      if (!project) return next(new ApiError(404, 'Project not found.'));
+
+      const activeSurvey = await RoofSurvey.findOne({
+        projectId: project._id,
+        status: { $in: ['Scheduled', 'In Progress', 'Submitted'] },
+      }).sort({ createdAt: -1 });
+
+      if (activeSurvey && !reassign) {
+        return next(new ApiError(409, 'This project already has an active survey assignment. Reassign explicitly to replace it.'));
+      }
+
+      let survey = project.surveyId ? await RoofSurvey.findById(project.surveyId) : null;
+      if (!survey) {
+        survey = await RoofSurvey.create({
+          projectId: project._id,
+          customerId: project.customerId,
+          technicianId,
+          assignedTo: technician.name,
+          scheduledDate,
+          status: 'Scheduled',
+          remarks: remarks || '',
+        });
+      } else {
+        survey.customerId = project.customerId;
+        survey.projectId = project._id;
+        survey.technicianId = technician._id;
+        survey.assignedTo = technician.name;
+        survey.scheduledDate = scheduledDate;
+        survey.remarks = remarks || survey.remarks || '';
+        survey.status = 'Scheduled';
+        survey.approvedAt = '';
+        survey.approvedBy = '';
+        await survey.save();
+      }
+
+      project.surveyId = survey._id;
+      project.status = 'Survey Scheduled';
+      project.assignedTo = req.user.name;
+      await project.save();
+
+      await Customer.findByIdAndUpdate(project.customerId, { leadStatus: 'Survey Scheduled' });
+
+      return sendSuccess(res, 200, { project: publicDoc(project), survey: publicDoc(survey) }, 'Survey assignment saved.');
+    } catch (error) {
+      next(error);
+    }
+  },
+];
+
 export const submitSurvey = [
   requireStaff,
   async (req, res, next) => {
@@ -188,6 +344,15 @@ export const submitSurvey = [
       if (!survey) return next(new ApiError(404, 'Survey not found.'));
       if (['Approved', 'Rejected'].includes(survey.status)) {
         return next(new ApiError(409, `A ${survey.status.toLowerCase()} survey cannot be edited.`));
+      }
+      if (req.user.role === 'Sales') {
+        return next(new ApiError(403, 'Sales staff cannot submit field survey measurements.'));
+      }
+      if (req.user.role === 'Surveyor' && survey.technicianId && String(survey.technicianId) !== String(req.user._id)) {
+        return next(new ApiError(403, 'Only the assigned survey technician can submit this survey.'));
+      }
+      if (req.user.role !== 'Admin' && req.user.role !== 'Surveyor' && survey.technicianId && String(survey.technicianId) !== String(req.user._id)) {
+        return next(new ApiError(403, 'Only the assigned survey technician can submit this survey.'));
       }
 
       const numericFields = ['roofLength', 'roofWidth', 'usableArea', 'tilt', 'cableDistance'];
@@ -226,7 +391,12 @@ export const reviewSurvey = [
       if (!['approve', 'reject'].includes(decision)) return next(new ApiError(400, 'Decision must be approve or reject.'));
       const survey = await RoofSurvey.findById(req.params.surveyId);
       if (!survey) return next(new ApiError(404, 'Survey not found.'));
+      if (req.user.role === 'Sales') return next(new ApiError(403, 'Sales staff cannot approve technical survey feasibility.'));
+      if (req.user.role !== 'Surveyor' && req.user.role !== 'Admin') return next(new ApiError(403, 'Only the surveyor team can review technical surveys.'));
       if (survey.status !== 'Submitted') return next(new ApiError(409, 'Only submitted surveys can be reviewed.'));
+      if (req.user.role === 'Surveyor' && survey.technicianId && String(survey.technicianId) === String(req.user._id)) {
+        return next(new ApiError(403, 'Survey technicians cannot approve their own survey.'));
+      }
 
       survey.status = decision === 'approve' ? 'Approved' : 'Rejected';
       if (decision === 'approve') {
@@ -256,13 +426,9 @@ export const createQuotation = [
         return next(new ApiError(409, 'A quotation already exists for this project.'));
       }
 
-      const capacity = Math.max(1, Number(project.capacity) || 3);
-      const items = [
-        { component: 'Solar Panel 540W', category: 'Panel', qty: Math.ceil(capacity * 1000 / 540), unitPrice: 16500 },
-        { component: project.gridType === 'Off-Grid' ? 'Off-Grid Inverter' : 'String Inverter', category: 'Inverter', qty: 1, unitPrice: 62000 },
-        { component: 'Mounting Structure Kit', category: 'Mounting', qty: capacity, unitPrice: 6000 },
-        { component: 'DC & AC Cabling', category: 'Cable', qty: 1, unitPrice: 12000 },
-      ];
+      const config = await SolarConfiguration.findOne({ projectId: project._id, status: 'Approved' }).lean();
+      const capacity = Number(config?.capacity || project.capacity || 3);
+      const items = buildBomFromConfiguration(config || { capacity, systemType: project.gridType || 'On-Grid' });
       const subtotal = items.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
       const tax = Math.round(subtotal * 0.08);
       const quotation = new Quotation({

@@ -11,6 +11,7 @@ import { KpiCard } from '@/components/ui/KpiCard';
 import { Modal } from '@/components/ui/Modal';
 import { StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
 import { fmtDate, daysBetween, fmtNum } from '@/lib/format';
+import { canStartInstallation, canCompleteInstallation, validateCapacity } from '@/lib/workflowRules';
 
 export function TechnicianPortal() {
   const [active, setActive] = useState('dashboard');
@@ -96,7 +97,31 @@ function AssignedJobsPage() {
   const [active, setActive] = useState(null);
 
   const startJob = (i) => {
-    setData((p) => ({ ...p, installations: p.installations.map((ins) => ins.id === i.id ? { ...ins, status: 'In Progress', startedAt: new Date().toISOString().slice(0, 10) } : ins) }));
+    const project = data.projects.find((p) => p.id === i.projectId);
+    const dispatch = data.dispatches.find((d) => d.projectId === project?.id);
+    const ready = canStartInstallation({
+      installation: i,
+      project,
+      dispatch,
+      payments: data.payments,
+      equipment: data.equipment,
+    });
+
+    if (!ready.allowed) {
+      alert(ready.reason);
+      return;
+    }
+
+    const startedAt = new Date().toISOString();
+    setData((p) => ({
+      ...p,
+      installations: p.installations.map((ins) => ins.id === i.id ? {
+        ...ins,
+        status: 'In Progress',
+        startedAt,
+        history: [...(ins.history || []), { action: 'Start Installation', at: startedAt }],
+      } : ins),
+    }));
     setActive(null);
   };
 
@@ -347,9 +372,36 @@ function CommissioningPage() {
   const myJobs = useMyInstallations();
   const { data, setData } = useData();
   const complete = (i) => {
+    const ready = canCompleteInstallation({ installation: i });
+    if (!ready.allowed) {
+      alert(ready.reason);
+      return;
+    }
+
+    const project = data.projects.find((p) => p.id === i.projectId);
+    const config = data.configs.find((c) => c.id === project?.configId);
+    const approvedCapacity = Number(project?.capacity || config?.recommendedCapacity || 0);
+    const actualCapacity = Number(i.actualInstalledCapacity ?? approvedCapacity);
+    const validation = validateCapacity({ approvedCapacity, actualInstalledCapacity: actualCapacity });
     const allDone = i.checklist.every((c) => c.done);
-    if (!allDone || !i.earthingConfirmed) return;
-    setData((p) => ({ ...p, installations: p.installations.map((ins) => ins.id === i.id ? { ...ins, status: 'Completed', finishedAt: new Date().toISOString().slice(0, 10) } : ins) }));
+
+    if (!allDone || !i.earthingConfirmed) {
+      alert('Complete checklist and confirm earthing before completing the installation.');
+      return;
+    }
+
+    setData((p) => ({
+      ...p,
+      installations: p.installations.map((ins) => ins.id === i.id ? {
+        ...ins,
+        status: validation.matches ? 'Completed' : 'Pending Verification',
+        finishedAt: new Date().toISOString(),
+        actualInstalledCapacity: actualCapacity,
+        capacityMismatch: !validation.matches,
+        reviewRequired: !validation.matches,
+        history: [...(ins.history || []), { action: 'Installation Finished', at: new Date().toISOString() }],
+      } : ins),
+    }));
   };
   const confirmEarthing = (i) => {
     setData((p) => ({ ...p, installations: p.installations.map((ins) => ins.id === i.id ? { ...ins, earthingConfirmed: true } : ins) }));
@@ -380,15 +432,84 @@ function CommissioningPage() {
 function CompletionPage() {
   const myJobs = useMyInstallations();
   const { data, setData } = useData();
-  const done = myJobs.filter((i) => i.status === 'Completed' || i.status === 'Accepted');
+  const [reportJob, setReportJob] = useState(null);
+  const [reportForm, setReportForm] = useState({
+    installationDate: '',
+    actualCapacity: '',
+    safetyInspection: '',
+    powerTest: '',
+    technicianRemarks: '',
+    customerSignature: '',
+    photoRefs: '',
+  });
+
+  const done = myJobs.filter((i) => i.status === 'Completed' || i.status === 'Accepted' || i.status === 'Pending Verification');
+
+  const openReport = (i) => {
+    const project = data.projects.find((p) => p.id === i.projectId);
+    const config = data.configs.find((c) => c.id === project?.configId);
+    const approvedCapacity = Number(project?.capacity || config?.recommendedCapacity || 0);
+    setReportJob(i);
+    setReportForm({
+      installationDate: i.installationDate || new Date().toISOString().slice(0, 10),
+      actualCapacity: i.actualInstalledCapacity ?? String(approvedCapacity),
+      safetyInspection: i.safetyInspection || '',
+      powerTest: i.powerTest || '',
+      technicianRemarks: i.technicianRemarks || '',
+      customerSignature: i.customerSignature || '',
+      photoRefs: (i.photos || []).join(', '),
+    });
+  };
+
+  const saveReport = () => {
+    if (!reportJob) return;
+    const project = data.projects.find((p) => p.id === reportJob.projectId);
+    const config = data.configs.find((c) => c.id === project?.configId);
+    const approvedCapacity = Number(project?.capacity || config?.recommendedCapacity || 0);
+    const currentCapacity = Number(reportForm.actualCapacity || approvedCapacity);
+    const validation = validateCapacity({ approvedCapacity, actualInstalledCapacity: currentCapacity });
+
+    setData((p) => ({
+      ...p,
+      installations: p.installations.map((ins) => ins.id === reportJob.id ? {
+        ...ins,
+        installationDate: reportForm.installationDate,
+        actualInstalledCapacity: currentCapacity,
+        capacityMismatch: !validation.matches,
+        reviewRequired: !validation.matches,
+        safetyInspection: reportForm.safetyInspection,
+        powerTest: reportForm.powerTest,
+        technicianRemarks: reportForm.technicianRemarks,
+        customerSignature: reportForm.customerSignature,
+        photos: reportForm.photoRefs ? reportForm.photoRefs.split(',').map((item) => item.trim()).filter(Boolean) : ins.photos,
+        status: validation.matches ? 'Completed' : 'Pending Verification',
+        finishedAt: new Date().toISOString(),
+        history: [...(ins.history || []), { action: 'Completion Report Submitted', at: new Date().toISOString() }],
+      } : ins),
+    }));
+    setReportJob(null);
+  };
 
   const accept = (i) => {
-    setData((p) => ({ ...p, installations: p.installations.map((ins) => ins.id === i.id ? { ...ins, status: 'Accepted', customerAccepted: true, acceptedAt: new Date().toISOString().slice(0, 10), acceptedByName: data.customers.find((c) => c.id === data.projects.find((p) => p.id === i.projectId)?.customerId)?.name } : ins) }));
+    if (!i.customerSignature) {
+      alert('Customer signature is required before acceptance can be recorded.');
+      return;
+    }
+    setData((p) => ({
+      ...p,
+      installations: p.installations.map((ins) => ins.id === i.id ? {
+        ...ins,
+        status: 'Accepted',
+        customerAccepted: true,
+        acceptedAt: new Date().toISOString(),
+        acceptedByName: data.customers.find((c) => c.id === data.projects.find((pr) => pr.id === i.projectId)?.customerId)?.name,
+      } : ins),
+    }));
   };
 
   return (
     <PageContainer>
-      <PageHeader title="Completion Reports" description="Completed installations awaiting or with customer acceptance." />
+      <PageHeader title="Completion Reports" description="Submit installation evidence and capture customer acceptance after installation." />
       <div className="space-y-3">
         {done.map((i) => {
           const p = data.projects.find((p) => p.id === i.projectId);
@@ -396,16 +517,32 @@ function CompletionPage() {
           return (
             <div key={i.id} className="card p-4">
               <div className="flex items-start justify-between gap-3">
-                <div><div className="font-medium text-navy-800">{p?.code} — {c?.name}</div><div className="text-xs text-slate-500">Finished {fmtDate(i.finishedAt)} · {i.photos.length} photos</div></div>
+                <div><div className="font-medium text-navy-800">{p?.code} — {c?.name}</div><div className="text-xs text-slate-500">{i.reviewRequired ? 'Capacity review required' : 'Finished ' + fmtDate(i.finishedAt)} · {i.photos.length} photos</div></div>
                 <div className="flex items-center gap-2">
                   <StatusBadgeAuto status={i.status} />
-                  {i.status === 'Completed' && <button className="btn-emerald" onClick={() => accept(i)}>Get Acceptance</button>}
+                  <button className="btn-outline text-xs" onClick={() => openReport(i)}>Report</button>
+                  {i.status === 'Completed' && <button className="btn-emerald text-xs" onClick={() => accept(i)}>Get Acceptance</button>}
                 </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {reportJob && (
+        <Modal open onClose={() => setReportJob(null)} title="Installation Completion Form" description={`Project ${data.projects.find((p) => p.id === reportJob.projectId)?.code}`} footer={<><button className="btn-outline" onClick={() => setReportJob(null)}>Cancel</button><button className="btn-primary" onClick={saveReport}>Submit Completion</button></>}>
+          <div className="space-y-3 text-sm">
+            <div><label className="label">Installation Date</label><input type="date" className="input" value={reportForm.installationDate} onChange={(e) => setReportForm({ ...reportForm, installationDate: e.target.value })} /></div>
+            <div><label className="label">Actual Installed Capacity (kW)</label><input type="number" step="0.1" className="input" value={reportForm.actualCapacity} onChange={(e) => setReportForm({ ...reportForm, actualCapacity: e.target.value })} /></div>
+            <div><label className="label">Electrical & Safety Inspection</label><textarea className="input min-h-[80px]" value={reportForm.safetyInspection} onChange={(e) => setReportForm({ ...reportForm, safetyInspection: e.target.value })} /></div>
+            <div><label className="label">Power Generation / Test Results</label><textarea className="input min-h-[80px]" value={reportForm.powerTest} onChange={(e) => setReportForm({ ...reportForm, powerTest: e.target.value })} /></div>
+            <div><label className="label">Technician Remarks</label><textarea className="input min-h-[80px]" value={reportForm.technicianRemarks} onChange={(e) => setReportForm({ ...reportForm, technicianRemarks: e.target.value })} /></div>
+            <div><label className="label">Installation Photographs</label><input className="input" value={reportForm.photoRefs} onChange={(e) => setReportForm({ ...reportForm, photoRefs: e.target.value })} placeholder="inst-1.jpg, inst-2.jpg" /></div>
+            <div><label className="label">Customer Digital Signature</label><input className="input" value={reportForm.customerSignature} onChange={(e) => setReportForm({ ...reportForm, customerSignature: e.target.value })} placeholder="Customer signature before accepting" /></div>
+            {validateCapacity({ approvedCapacity: Number(data.projects.find((p) => p.id === reportJob.projectId)?.capacity || data.configs.find((c) => c.id === data.projects.find((p) => p.id === reportJob.projectId)?.configId)?.recommendedCapacity || 0), actualInstalledCapacity: Number(reportForm.actualCapacity || 0) }).matches ? <AlertBanner type="success" message="Installed capacity matches the approved configuration." /> : <AlertBanner type="warning" message="Capacity differs from the approved system. The installation will be flagged for Administrator verification." />}
+          </div>
+        </Modal>
+      )}
     </PageContainer>
   );
 }

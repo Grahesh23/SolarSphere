@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Users, UserPlus, Phone, FileText, FolderKanban, Bell, ClipboardCheck, TrendingUp,
   CheckCircle2, XCircle, IndianRupee, Plus,
@@ -9,7 +9,7 @@ import { PortalLayout, PageContainer, PageHeader } from '@/components/layout/Por
 import { KpiCard } from '@/components/ui/KpiCard';
 import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
-import { StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
+import { StatusBadge, StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
 import { fmtINR, fmtDate } from '@/lib/format';
 import { useWorkflow } from '@/data/WorkflowContext';
 
@@ -309,20 +309,180 @@ function SalesQuotationsPage() {
 }
 
 function MyProjectsPage() {
-  const { projects, customers } = useWorkflow();
+  const { projects, customers, surveys, request, refresh } = useWorkflow();
   const { user } = useAuth();
+  const [surveyors, setSurveyors] = useState([]);
+  const [assignment, setAssignment] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [projectForm, setProjectForm] = useState({ customerId: '', capacity: 3, gridType: 'On-Grid', location: '' });
+  const [assignmentForm, setAssignmentForm] = useState({ technicianId: '', scheduledDate: new Date().toISOString().slice(0, 10), remarks: '' });
+  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
+  const [assignmentError, setAssignmentError] = useState('');
+  const [projectError, setProjectError] = useState('');
+
   const myProjects = projects.filter((p) => p.assignedTo === user?.name || user?.role === 'Admin');
+
+  const getProjectSurvey = (project) => surveys.find((survey) => String(survey.projectId) === String(project.id));
+
+  const loadSurveyors = async () => {
+    try {
+      const result = await request('/workflow/surveyors');
+      setSurveyors(result.surveyors || []);
+    } catch (err) {
+      setSurveyors([]);
+    }
+  };
+
+  useEffect(() => {
+    loadSurveyors();
+  }, [request]);
+
+  const getStatusBadge = (survey) => {
+    const surveyStatus = !survey ? 'Not Assigned' : survey.status === 'Scheduled' ? 'Assigned' : survey.status;
+    const variant = !survey ? 'slate' : survey.status === 'Approved' ? 'emerald' : survey.status === 'Rejected' ? 'rose' : survey.status === 'Submitted' ? 'amber' : survey.status === 'In Progress' ? 'navy' : survey.status === 'Scheduled' ? 'amber' : 'slate';
+    return <StatusBadge status={surveyStatus} variant={variant} />;
+  };
+
+  const openAssignment = (project) => {
+    const survey = getProjectSurvey(project);
+    setAssignment(project);
+    setAssignmentError('');
+    setAssignmentForm({
+      technicianId: survey?.technicianId || '',
+      scheduledDate: survey?.scheduledDate || new Date().toISOString().slice(0, 10),
+      remarks: survey?.remarks || '',
+    });
+  };
+
+  const saveProject = async () => {
+    if (!projectForm.customerId) {
+      setProjectError('Choose a customer before creating the project.');
+      return;
+    }
+
+    setSavingProject(true);
+    setProjectError('');
+    try {
+      await request('/workflow/projects', {
+        method: 'POST',
+        body: JSON.stringify({
+          customerId: projectForm.customerId,
+          capacity: projectForm.capacity,
+          gridType: projectForm.gridType,
+          location: projectForm.location,
+        }),
+      });
+      await refresh();
+      setCreateOpen(false);
+      setProjectForm({ customerId: '', capacity: 3, gridType: 'On-Grid', location: '' });
+    } catch (saveError) {
+      setProjectError(saveError.message || 'Could not create project.');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const saveAssignment = async () => {
+    if (!assignment || !assignmentForm.technicianId || !assignmentForm.scheduledDate) {
+      setAssignmentError('Select a survey technician and a date before saving.');
+      return;
+    }
+
+    setSavingAssignment(true);
+    setAssignmentError('');
+    try {
+      const survey = getProjectSurvey(assignment);
+      await request(`/workflow/projects/${assignment.id}/surveys`, {
+        method: 'POST',
+        body: JSON.stringify({
+          technicianId: assignmentForm.technicianId,
+          scheduledDate: assignmentForm.scheduledDate,
+          remarks: assignmentForm.remarks,
+          reassign: !!survey && ['Scheduled', 'In Progress', 'Submitted'].includes(survey.status),
+        }),
+      });
+      await refresh();
+      setAssignment(null);
+    } catch (saveError) {
+      setAssignmentError(saveError.message || 'Could not assign the survey.');
+    } finally {
+      setSavingAssignment(false);
+    }
+  };
+
   const columns = [
     { key: 'code', label: 'Code', render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
-    { key: 'customer', label: 'Customer', sortValue: (r) => r.code, render: (r) => { const c = customers.find((c) => c.id === r.customerId); return c?.name; } },
+    { key: 'customer', label: 'Customer', sortValue: (r) => r.code, render: (r) => { const c = customers.find((c) => c.id === r.customerId); return <span className="font-medium text-navy-800">{c?.name}</span>; } },
     { key: 'capacity', label: 'Capacity', render: (r) => `${r.capacity} kW ${r.gridType}` },
+    { key: 'surveyStatus', label: 'Survey Status', sortValue: (r) => getProjectSurvey(r)?.status || 'Not Assigned', render: (r) => getStatusBadge(getProjectSurvey(r)) },
+    { key: 'assignedSurveyTechnician', label: 'Assigned Survey Technician', render: (r) => { const survey = getProjectSurvey(r); return survey?.assignedTo || '—'; } },
+    { key: 'scheduledSurveyDate', label: 'Scheduled Survey Date', render: (r) => { const survey = getProjectSurvey(r); return survey?.scheduledDate ? fmtDate(survey.scheduledDate) : '—'; } },
     { key: 'completion', label: 'Progress', sortValue: (r) => r.completion, render: (r) => <span className="badge-navy">{r.completion}%</span> },
-    { key: 'status', label: 'Status', sortValue: (r) => r.status, render: (r) => <StatusBadgeAuto status={r.status} /> },
+    { key: 'status', label: 'Project Status', sortValue: (r) => r.status, render: (r) => <StatusBadgeAuto status={r.status} /> },
+    { key: 'action', label: 'Action', render: (r) => { const survey = getProjectSurvey(r); const label = survey ? ['Scheduled', 'In Progress', 'Submitted'].includes(survey.status) ? 'Reassign Survey' : 'Assign Survey' : 'Assign Survey'; return <button className="btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); openAssignment(r); }}>{label}</button>; } },
   ];
+
   return (
     <PageContainer>
-      <PageHeader title="My Projects" description="Projects you are responsible for." />
-      <DataTable columns={columns} rows={myProjects} searchKeys={['code']} searchPlaceholder="Search projects..." />
+      <PageHeader title="My Projects" description="Projects you are responsible for." actions={<button className="btn-primary" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" />Create Project</button>} />
+      {myProjects.length === 0 && (
+        <div className="card p-6 text-center">
+          <div className="text-slate-500 mb-3">No projects yet. Create the first project for the customer request, then assign a survey technician.</div>
+          <button className="btn-primary" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" />Create Project</button>
+        </div>
+      )}
+      {myProjects.length > 0 && <DataTable columns={columns} rows={myProjects} searchKeys={['code']} searchPlaceholder="Search projects..." />}
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Project" description="Create a project from a customer request before assigning a survey technician." footer={<><button className="btn-outline" onClick={() => setCreateOpen(false)}>Cancel</button><button className="btn-primary" onClick={saveProject} disabled={savingProject}>{savingProject ? 'Creating...' : 'Create Project'}</button></>}>
+        <div className="space-y-3">
+          {projectError && <div className="card p-3 text-sm text-rose-700 bg-rose-50">{projectError}</div>}
+          <div>
+            <label className="label">Customer</label>
+            <select className="input" value={projectForm.customerId} onChange={(e) => setProjectForm({ ...projectForm, customerId: e.target.value })}>
+              <option value="">Select customer</option>
+              {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name} · {customer.city}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Capacity (kW)</label>
+              <input type="number" className="input" value={projectForm.capacity} onChange={(e) => setProjectForm({ ...projectForm, capacity: Number(e.target.value) || 3 })} />
+            </div>
+            <div>
+              <label className="label">Grid Type</label>
+              <select className="input" value={projectForm.gridType} onChange={(e) => setProjectForm({ ...projectForm, gridType: e.target.value })}>
+                <option>On-Grid</option>
+                <option>Off-Grid</option>
+                <option>Hybrid</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Location</label>
+            <input className="input" value={projectForm.location} onChange={(e) => setProjectForm({ ...projectForm, location: e.target.value })} placeholder="City, State" />
+          </div>
+        </div>
+      </Modal>
+      <Modal open={!!assignment} onClose={() => setAssignment(null)} title="Assign Survey" description="Select a surveyor and schedule the technical site visit." footer={<><button className="btn-outline" onClick={() => setAssignment(null)}>Cancel</button><button className="btn-primary" onClick={saveAssignment} disabled={savingAssignment}>{savingAssignment ? 'Saving...' : 'Save Assignment'}</button></>}>
+        <div className="space-y-3">
+          {assignmentError && <div className="card p-3 text-sm text-rose-700 bg-rose-50">{assignmentError}</div>}
+          <div>
+            <label className="label">Survey Technician</label>
+            <select className="input" value={assignmentForm.technicianId} onChange={(e) => setAssignmentForm({ ...assignmentForm, technicianId: e.target.value })}>
+              <option value="">Select survey technician</option>
+              {surveyors.map((tech) => <option key={tech.id} value={tech.id}>{tech.name} · {tech.email}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Scheduled Date</label>
+            <input type="date" className="input" value={assignmentForm.scheduledDate} onChange={(e) => setAssignmentForm({ ...assignmentForm, scheduledDate: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">Remarks</label>
+            <textarea className="input" rows={3} value={assignmentForm.remarks} onChange={(e) => setAssignmentForm({ ...assignmentForm, remarks: e.target.value })} placeholder="Site notes or customer requirements" />
+          </div>
+        </div>
+      </Modal>
     </PageContainer>
   );
 }

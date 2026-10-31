@@ -21,4 +21,10 @@ const projectSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+projectSchema.pre('validate', function setProjectCode() {
+  if (!this.code && this._id) {
+    this.code = `PRJ-${new Date().getFullYear()}-${this._id.toString().slice(-6).toUpperCase()}`;
+  }
+});
+
 export default mongoose.models.Project || mongoose.model('Project', projectSchema);

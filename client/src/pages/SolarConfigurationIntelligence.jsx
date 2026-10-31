@@ -17,26 +17,51 @@ import { fmtINR, fmtNum, genId } from '@/lib/format';
 const PANEL_W = 540;
 const PANEL_AREA_M2 = 2.6;
 
+function getSystemType(input) {
+  return input.gridAvailable ? 'On-Grid' : 'Off-Grid';
+}
+
+function buildBom(rec, systemType) {
+  const bom = [
+    { component: rec.panelModel, category: 'Panels', qty: rec.panelCount, unitPrice: 16500, required: true },
+    { component: systemType === 'On-Grid' ? 'Grid-Compatible Inverter' : 'Off-Grid Inverter', category: 'Inverter', qty: 1, unitPrice: systemType === 'On-Grid' ? 62000 : 30000, required: true },
+    { component: 'Mounting Structure Kit', category: 'Mounting', qty: Math.max(1, Math.ceil(rec.capacity)), unitPrice: 6000, required: true },
+    { component: 'DC & AC Cabling', category: 'Cables', qty: 1, unitPrice: 12000, required: true },
+    { component: 'Distribution Box & Protection', category: 'Protection', qty: 1, unitPrice: 8000, required: true },
+    { component: 'Earthing & Safety Kit', category: 'Safety', qty: 1, unitPrice: 5000, required: true },
+  ];
+
+  if (systemType === 'Off-Grid') {
+    bom.push({ component: rec.batteryModel || 'Battery Bank 150Ah', category: 'Battery', qty: rec.batteryCount || Math.max(1, Math.ceil(rec.capacity)), unitPrice: 14500, required: true });
+    bom.push({ component: 'MPPT Charge Controller', category: 'Charge Controller', qty: 1, unitPrice: 9000, required: true });
+  }
+
+  return bom;
+}
+
 function recommend(input) {
   const capacity = Math.min(Math.max(Math.ceil(input.consumption / 120), 1), 5);
-  const gridType = input.gridAvailable ? 'On-Grid' : 'Off-Grid';
+  const systemType = getSystemType(input);
   const panelCount = Math.ceil((capacity * 1000) / PANEL_W);
   const fitsArea = Math.floor(input.roofArea / PANEL_AREA_M2);
-  const finalPanels = Math.min(panelCount, fitsArea);
+  const finalPanels = Math.min(panelCount, Math.max(1, fitsArea));
   const finalCapacity = Math.round((finalPanels * PANEL_W) / 1000 * 10) / 10;
 
-  const batteryCount = gridType === 'Off-Grid' ? Math.ceil(finalCapacity) : 0;
+  const batteryCount = systemType === 'Off-Grid' ? Math.ceil(finalCapacity) : 0;
   const panelModel = input.budget >= 150000 ? 'Waaree 540W Mono PERC' : 'Vikram 540W';
-  const inverterModel = gridType === 'On-Grid' ? 'SolarEdge 5kW Single Phase' : 'Luminous 3kVA Off-Grid';
+  const inverterModel = systemType === 'On-Grid' ? 'SolarEdge 5kW Single Phase' : 'Luminous 3kVA Off-Grid';
   const batteryModel = batteryCount > 0 ? 'Exide 150Ah Tubular' : '';
 
+  const mountCost = 18000 + finalCapacity * 2000;
   const panelCost = finalPanels * 16500;
-  const inverterCost = gridType === 'On-Grid' ? 62000 : 30000;
+  const inverterCost = systemType === 'On-Grid' ? 62000 : 30000;
   const batteryCost = batteryCount * 14500;
-  const mountingCost = 18000 + finalCapacity * 2000;
   const cablingCost = 12000;
+  const protectionCost = 8000;
+  const safetyCost = 5000;
+  const chargeControllerCost = systemType === 'Off-Grid' ? 9000 : 0;
   const installCost = 22000;
-  const estimatedCost = panelCost + inverterCost + batteryCost + mountingCost + cablingCost + installCost;
+  const estimatedCost = panelCost + inverterCost + batteryCost + mountCost + cablingCost + protectionCost + safetyCost + chargeControllerCost + installCost;
 
   const estimatedAnnual = Math.round(finalCapacity * 1650);
   const savingsMonthly = Math.round((estimatedAnnual / 12) * 7.5);
@@ -45,13 +70,24 @@ function recommend(input) {
   const reasoning = [];
   reasoning.push(`Customer consumes ${input.consumption} kWh/month → recommended capacity ${finalCapacity} kW`);
   reasoning.push(`Roof area ${input.roofArea} m² fits ${fitsArea} panels → using ${finalPanels}`);
-  reasoning.push(input.gridAvailable ? 'Grid available → On-Grid configuration (net metering)' : 'No grid → Off-Grid with battery backup');
+  reasoning.push(systemType === 'On-Grid' ? 'Grid available → On-Grid configuration (net metering)' : 'No grid → Off-Grid with battery backup');
   if (batteryCount > 0) reasoning.push(`${batteryCount} × 150Ah battery for ${finalCapacity} kW off-grid autonomy`);
   reasoning.push(`Budget ${fmtINR(input.budget)} → ${input.budget >= estimatedCost ? 'sufficient for premium components' : 'may require financing; standard components selected'}`);
 
   return {
-    capacity: finalCapacity, gridType, panelCount: finalPanels, panelModel, inverterModel,
-    batteryCount, batteryModel, estimatedCost, estimatedAnnual, paybackYears, savingsMonthly, reasoning,
+    capacity: finalCapacity,
+    gridType: systemType,
+    panelCount: finalPanels,
+    panelModel,
+    inverterModel,
+    batteryCount,
+    batteryModel,
+    estimatedCost,
+    estimatedAnnual,
+    paybackYears,
+    savingsMonthly,
+    reasoning,
+    bom: buildBom({ ...arguments[0], capacity: finalCapacity, panelCount: finalPanels, panelModel, inverterModel, batteryCount, batteryModel }, systemType),
   };
 }
 
@@ -60,6 +96,7 @@ export function SolarConfigurationIntelligence() {
   const [input, setInput] = useState({
     consumption: 480, monthlyBill: 7200, roofArea: 80, location: 'Pune, MH',
     orientation: 'South', shading: 'Low', gridAvailable: true, budget: 300000,
+    systemType: 'On-Grid', capacity: 3,
   });
   const [rec, setRec] = useState(null);
   const [computing, setComputing] = useState(false);
@@ -72,10 +109,11 @@ export function SolarConfigurationIntelligence() {
     setComputing(true);
     setRec(null);
     setTimeout(() => {
-      const primary = recommend(input);
+      const targetSystemType = input.systemType || getSystemType(input);
+      const primary = recommend({ ...input, gridAvailable: targetSystemType === 'On-Grid', capacity: Number(input.capacity) || 3 });
       setRec(primary);
-      const alt1 = recommend({ ...input, budget: 200000 });
-      const alt2 = recommend({ ...input, gridAvailable: !input.gridAvailable });
+      const alt1 = recommend({ ...input, gridAvailable: targetSystemType === 'On-Grid', budget: 200000, capacity: Math.max(1, Math.min(5, Number(input.capacity) || 3)) });
+      const alt2 = recommend({ ...input, gridAvailable: targetSystemType !== 'On-Grid', capacity: Math.max(1, Math.min(5, Number(input.capacity) || 3)) });
       setAlternatives([alt1, alt2]);
       setComputing(false);
     }, 1600);
@@ -83,11 +121,14 @@ export function SolarConfigurationIntelligence() {
 
   const approve = () => {
     if (!rec || !selectedProjectId) return;
+    const systemType = rec.gridType || getSystemType(input);
     const newConfig = {
       id: genId('cfg'),
       projectId: selectedProjectId,
       recommendedCapacity: rec.capacity,
-      gridType: rec.gridType,
+      gridType: systemType,
+      systemType,
+      capacity: Number(input.capacity) || Number(rec.capacity),
       panelCount: rec.panelCount,
       panelModel: rec.panelModel,
       inverterModel: rec.inverterModel,
@@ -96,10 +137,13 @@ export function SolarConfigurationIntelligence() {
       estimatedCost: rec.estimatedCost,
       estimatedAnnual: rec.estimatedAnnual,
       paybackYears: rec.paybackYears,
+      savingsMonthly: rec.savingsMonthly,
+      bom: (rec.bom || buildBom(rec, systemType)).map((item) => ({ ...item, id: genId('bom') })),
+      reasoning: rec.reasoning,
       status: 'Approved',
       createdAt: new Date().toISOString().slice(0, 10),
     };
-    setData((p) => ({ ...p, configs: [...p.configs, newConfig], projects: p.projects.map((pr) => pr.id === selectedProjectId ? { ...pr, configId: newConfig.id, totalCost: rec.estimatedCost } : pr) }));
+    setData((p) => ({ ...p, configs: [...p.configs, newConfig], projects: p.projects.map((pr) => pr.id === selectedProjectId ? { ...pr, configId: newConfig.id, totalCost: rec.estimatedCost, gridType: systemType, capacity: Number(input.capacity) || Number(rec.capacity) } : pr) }));
     setApproveOpen(false);
   };
 
@@ -129,6 +173,16 @@ export function SolarConfigurationIntelligence() {
         <div className="card p-5">
           <h3 className="section-title flex items-center gap-2 mb-4"><SlidersHorizontal className="w-4 h-4 text-grape-500" />Customer Inputs</h3>
           <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">System Type</label>
+                <select className="input" value={input.systemType || 'On-Grid'} onChange={(e) => setInput({ ...input, systemType: e.target.value, gridAvailable: e.target.value === 'On-Grid' })}>
+                  <option value="On-Grid">On-Grid</option>
+                  <option value="Off-Grid">Off-Grid</option>
+                </select>
+              </div>
+              <div><label className="label">Capacity (kW)</label><input type="number" min="1" max="5" className="input" value={input.capacity} onChange={(e) => setInput({ ...input, capacity: Math.min(5, Math.max(1, +e.target.value || 1)) })} /></div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="label">Consumption (kWh/mo)</label><input type="number" className="input" value={input.consumption} onChange={(e) => setInput({ ...input, consumption: +e.target.value })} /></div>
               <div><label className="label">Monthly Bill (INR)</label><input type="number" className="input" value={input.monthlyBill} onChange={(e) => setInput({ ...input, monthlyBill: +e.target.value })} /></div>
