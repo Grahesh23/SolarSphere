@@ -9,7 +9,7 @@ import { PageContainer as SharedPageContainer } from '@/components/layout/Mobile
 // PortalLayoutProps interface removed (TypeScript only)
 // PageKey import type removed (TypeScript only)
 
-export function PortalLayout({ active, onNavigate, children }) {
+export function PortalLayout({ active, onNavigate, children, notifications: notificationOverride }) {
   const { user, logout } = useAuth();
   const { data } = useData();
   const config = user ? ROLE_CONFIGS[user.role] : null;
@@ -22,7 +22,8 @@ export function PortalLayout({ active, onNavigate, children }) {
   const profileRef = useRef(null);
 
   const currentItem = config?.items.find((i) => i.key === active);
-  const unread = data.notifications.filter((n) => !n.read).length;
+  const notifications = notificationOverride ?? data.notifications;
+  const unread = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
     const onClick = (e) => {
@@ -147,7 +148,7 @@ export function PortalLayout({ active, onNavigate, children }) {
                   <span className="text-xs text-emerald-600 font-medium">{unread} new</span>
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {data.notifications.map((n) => (
+                  {notifications.map((n) => (
                     <div key={n.id} className={cn('px-4 py-3 border-b border-slate-100 flex gap-3', !n.read && 'bg-navy-50/40')}>
                       <div className={cn('w-8 h-8 rounded-full flex items-center justify-center shrink-0', toneCls[n.type])}><Bell className="w-4 h-4" /></div>
                       <div className="flex-1 min-w-0">
@@ -203,4 +204,3 @@ export function PageHeader({ title, description, actions }) {
     </div>
   );
 }
-

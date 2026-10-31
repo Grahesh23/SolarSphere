@@ -1,24 +1,112 @@
-import { useState, useMemo } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   Home, PanelTop, ClipboardCheck, Lightbulb, FileText, IndianRupee, Wrench, Boxes,
   ShieldCheck, Headphones, Bell, User, Sun, Zap, Clock, CheckCircle2, TrendingUp,
   Plus, Download, XCircle, AlertCircle, ChevronRight, MapPin,
 } from 'lucide-react';
 import { useData } from '@/data/DataContext';
-import { useAuth } from '@/data/AuthContext';
+import { useAuth, AUTH_TOKEN_KEY, API_BASE } from '@/data/AuthContext';
 import { PortalLayout, PageContainer, PageHeader } from '@/components/layout/PortalLayout';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Modal } from '@/components/ui/Modal';
 import { StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
 import { fmtINR, fmtDate, fmtNum, fmtPct, genId } from '@/lib/format';
 
+const CustomerPortalDataContext = createContext(null);
+
 export function CustomerPortal() {
   const [active, setActive] = useState('dashboard');
   return (
-    <PortalLayout active={active} onNavigate={setActive}>
-      <CustomerPage active={active} onNavigate={setActive} />
+    <CustomerPortalDataProvider>
+      <CustomerPortalLayout active={active} onNavigate={setActive}>
+        <CustomerPortalContent active={active} onNavigate={setActive} />
+      </CustomerPortalLayout>
+    </CustomerPortalDataProvider>
+  );
+}
+
+function CustomerPortalLayout({ active, onNavigate, children }) {
+  const { portalData } = useCustomerPortalData();
+  return (
+    <PortalLayout
+      active={active}
+      onNavigate={onNavigate}
+      notifications={portalData?.notifications || []}
+    >
+      {children}
     </PortalLayout>
   );
+}
+
+function CustomerPortalDataProvider({ children }) {
+  const [portalData, setPortalData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadPortal = async () => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+        if (!token) throw new Error('Your session is missing. Please sign in again.');
+
+        const response = await fetch(`${API_BASE}/auth/customer-portal`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Could not load your customer portal.');
+        }
+        if (!payload.data?.customer) {
+          throw new Error('The server response did not include your customer profile.');
+        }
+
+        setPortalData(payload.data);
+      } catch (loadError) {
+        if (loadError.name !== 'AbortError') {
+          setError(loadError.message || 'Could not load your customer portal.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+
+    loadPortal();
+    return () => controller.abort();
+  }, [attempt]);
+
+  const value = useMemo(
+    () => ({ portalData, setPortalData, error, loading, retry: () => setAttempt((value) => value + 1) }),
+    [portalData, error, loading]
+  );
+
+  return (
+    <CustomerPortalDataContext.Provider value={value}>
+      {children}
+    </CustomerPortalDataContext.Provider>
+  );
+}
+
+function CustomerPortalContent({ active, onNavigate }) {
+  const { error, loading, retry } = useCustomerPortalData();
+  if (loading) {
+    return <PageContainer><PageHeader title="Loading your portal" description="Getting your customer information from SolarSphere." /></PageContainer>;
+  }
+  if (error) {
+    return (
+      <PageContainer>
+        <PageHeader title="Unable to load your portal" description={error} />
+        <button className="btn-primary" onClick={retry}>Retry</button>
+      </PageContainer>
+    );
+  }
+  return <CustomerPage active={active} onNavigate={onNavigate} />;
 }
 
 function CustomerPage({ active, onNavigate }) {
@@ -40,27 +128,36 @@ function CustomerPage({ active, onNavigate }) {
 }
 
 function useMyData() {
-  const { data } = useData();
-  const { user } = useAuth();
-  const customerId = user?.customerId;
-  return useMemo(() => ({
-    customer: data.customers.find((c) => c.id === customerId) ?? null,
-    projects: data.projects.filter((p) => p.customerId === customerId),
-    surveys: data.surveys.filter((s) => s.customerId === customerId),
-    quotations: data.quotations.filter((q) => q.customerId === customerId),
-    payments: data.payments.filter((p) => p.customerId === customerId && p.type !== 'Supplier'),
-    services: data.services.filter((s) => s.customerId === customerId),
-    equipment: data.equipment.filter((e) => e.customerId === customerId),
-    warranties: data.warranties.filter((w) => w.customerId === customerId),
-    installations: data.installations.filter((i) => data.projects.some((p) => p.id === i.projectId && p.customerId === customerId)),
-  }), [data, customerId]);
+  const { portalData, setPortalData } = useCustomerPortalData();
+  return {
+    ...portalData,
+    setPortalData,
+    projects: portalData.projects || [],
+    surveys: portalData.surveys || [],
+    quotations: portalData.quotations || [],
+    payments: portalData.payments || [],
+    services: portalData.services || [],
+    equipment: portalData.equipment || [],
+    warranties: portalData.warranties || [],
+    installations: portalData.installations || [],
+    configs: portalData.configs || [],
+    notifications: portalData.notifications || [],
+    inventory: portalData.inventory || [],
+    technicians: portalData.technicians || [],
+  };
+}
+
+function useCustomerPortalData() {
+  const value = useContext(CustomerPortalDataContext);
+  if (!value) throw new Error('Customer portal data must be used within CustomerPortalDataProvider');
+  return value;
 }
 
 function CustDashboard({ onNavigate }) {
   const d = useMyData();
   const { user } = useAuth();
   const project = d.projects[0];
-  const config = d.projects[0] ? data_configs_lookup(d.projects[0].configId) : null;
+  const config = d.projects[0] ? d.configs.find((item) => item.id === d.projects[0].configId) : null;
   const pendingPay = d.payments.filter((p) => p.status === 'Pending' || p.status === 'Overdue').reduce((s, p) => s + p.amount, 0);
 
   return (
@@ -132,16 +229,11 @@ function CustDashboard({ onNavigate }) {
   );
 }
 
-function data_configs_lookup(id) {
-  const { data } = useData();
-  return data.configs.find((c) => c.id === id);
-}
-
 function MyProjectPage() {
   const d = useMyData();
   const project = d.projects[0];
   if (!project) return <PageContainer><PageHeader title="My Solar Project" /><AlertBanner type="info" message="No active project yet. Contact our sales team to begin your solar journey." /></PageContainer>;
-  const config = data_configs_lookup(project.configId);
+  const config = d.configs.find((item) => item.id === project.configId);
   const survey = d.surveys[0];
 
   return (
@@ -196,7 +288,7 @@ function SurveySchedulePage() {
       <PageHeader title="Survey Schedule" description="Your survey appointments and status." />
       <div className="space-y-3">
         {d.surveys.map((s) => {
-          const tech = useTechLookup(s.technicianId);
+          const tech = d.technicians.find((item) => item.id === s.technicianId);
           return (
             <div key={s.id} className="card p-4">
               <div className="flex items-start justify-between gap-3">
@@ -219,14 +311,9 @@ function SurveySchedulePage() {
   );
 }
 
-function useTechLookup(id) {
-  const { data } = useData();
-  return data.technicians.find((t) => t.id === id);
-}
-
 function RecommendationPage() {
   const d = useMyData();
-  const config = d.projects[0] ? data_configs_lookup(d.projects[0].configId) : null;
+  const config = d.projects[0] ? d.configs.find((item) => item.id === d.projects[0].configId) : null;
   return (
     <PageContainer>
       <PageHeader title="Solar Recommendation" description="Your personalized solar system recommendation." />
@@ -263,11 +350,10 @@ function RecommendationPage() {
 function QuotationPage() {
   const d = useMyData();
   const quote = d.quotations[0];
-  const { data, setData } = useData();
   if (!quote) return <PageContainer><PageHeader title="My Quotation" /><AlertBanner type="info" message="No quotation available yet. Once your survey is approved, a quotation will be generated." /></PageContainer>;
 
-  const accept = () => setData((p) => ({ ...p, quotations: p.quotations.map((q) => q.id === quote.id ? { ...q, status: 'Accepted' } : q), projects: p.projects.map((pr) => pr.id === quote.projectId ? { ...pr, status: 'Customer Approved' } : pr) }));
-  const reject = () => setData((p) => ({ ...p, quotations: p.quotations.map((q) => q.id === quote.id ? { ...q, status: 'Rejected' } : q) }));
+  const accept = () => d.setPortalData((p) => ({ ...p, quotations: p.quotations.map((q) => q.id === quote.id ? { ...q, status: 'Accepted' } : q), projects: p.projects.map((pr) => pr.id === quote.projectId ? { ...pr, status: 'Customer Approved' } : pr) }));
+  const reject = () => d.setPortalData((p) => ({ ...p, quotations: p.quotations.map((q) => q.id === quote.id ? { ...q, status: 'Rejected' } : q) }));
 
   return (
     <PageContainer>
@@ -381,13 +467,12 @@ function InstallationTrackingPage() {
 
 function EquipmentPage() {
   const d = useMyData();
-  const { data } = useData();
   return (
     <PageContainer>
       <PageHeader title="My Equipment" description="Equipment installed at your location." />
       <div className="space-y-3">
         {d.equipment.map((eq) => {
-          const item = data.inventory.find((i) => i.id === eq.itemId);
+          const item = d.inventory.find((i) => i.id === eq.itemId);
           return (
             <div key={eq.id} className="card p-4">
               <div className="flex items-start justify-between gap-3">
@@ -409,14 +494,13 @@ function EquipmentPage() {
 
 function WarrantyPage() {
   const d = useMyData();
-  const { data } = useData();
   return (
     <PageContainer>
       <PageHeader title="Warranty Details" description="Warranty status for your installed equipment." />
       <div className="space-y-3">
         {d.warranties.map((w) => {
-          const eq = data.equipment.find((e) => e.id === w.equipmentId);
-          const item = eq ? data.inventory.find((i) => i.id === eq.itemId) : null;
+          const eq = d.equipment.find((e) => e.id === w.equipmentId);
+          const item = eq ? d.inventory.find((i) => i.id === eq.itemId) : null;
           return (
             <div key={w.id} className="card p-4">
               <div className="flex items-start justify-between gap-3">
@@ -438,23 +522,22 @@ function WarrantyPage() {
 
 function ServicePage() {
   const d = useMyData();
-  const { data, setData } = useData();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ subject: '', description: '', equipmentId: '' });
 
   const create = () => {
     if (!form.subject) return;
     const t = {
-      id: genId('svc'), code: `TKT-${String(data.services.length + 1).padStart(3, '0')}`,
+      id: genId('svc'), code: `TKT-${String(d.services.length + 1).padStart(3, '0')}`,
       customerId: d.customer?.id ?? '', type: 'Warranty', subject: form.subject, description: form.description,
       status: 'Open', createdAt: new Date().toISOString().slice(0, 10), partsCost: 0, labourCost: 0, customerConfirmed: false,
       equipmentId: form.equipmentId || undefined,
     };
-    setData((p) => ({ ...p, services: [...p.services, t] }));
+    d.setPortalData((p) => ({ ...p, services: [...p.services, t] }));
     setOpen(false); setForm({ subject: '', description: '', equipmentId: '' });
   };
 
-  const confirm = (s) => setData((p) => ({ ...p, services: p.services.map((sv) => sv.id === s.id ? { ...sv, status: 'Closed', customerConfirmed: true, resolvedAt: new Date().toISOString().slice(0, 10) } : sv) }));
+  const confirm = (s) => d.setPortalData((p) => ({ ...p, services: p.services.map((sv) => sv.id === s.id ? { ...sv, status: 'Closed', customerConfirmed: true, resolvedAt: new Date().toISOString().slice(0, 10) } : sv) }));
 
   return (
     <PageContainer>
@@ -473,7 +556,7 @@ function ServicePage() {
       </div>
       <Modal open={open} onClose={() => setOpen(false)} title="New Complaint" footer={<><button className="btn-outline" onClick={() => setOpen(false)}>Cancel</button><button className="btn-primary" onClick={create}>Submit</button></>}>
         <div className="space-y-3">
-          <div><label className="label">Affected Equipment</label><select className="input" value={form.equipmentId} onChange={(e) => setForm({ ...form, equipmentId: e.target.value })}><option value="">General issue</option>{d.equipment.map((eq) => <option key={eq.id} value={eq.id}>{data.inventory.find((i) => i.id === eq.itemId)?.name ?? eq.serialNumber}</option>)}</select></div>
+          <div><label className="label">Affected Equipment</label><select className="input" value={form.equipmentId} onChange={(e) => setForm({ ...form, equipmentId: e.target.value })}><option value="">General issue</option>{d.equipment.map((eq) => <option key={eq.id} value={eq.id}>{d.inventory.find((i) => i.id === eq.itemId)?.name ?? eq.serialNumber}</option>)}</select></div>
           <div><label className="label">Subject *</label><input className="input" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></div>
           <div><label className="label">Description</label><textarea className="input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
         </div>
@@ -483,12 +566,12 @@ function ServicePage() {
 }
 
 function NotificationsPage() {
-  const { data } = useData();
+  const { notifications } = useMyData();
   return (
     <PageContainer>
       <PageHeader title="Notifications" description="Updates about your solar project." />
       <div className="space-y-2">
-        {data.notifications.map((n) => (
+        {notifications.map((n) => (
           <div key={n.id} className={`card p-4 flex items-start gap-3 ${!n.read ? 'border-l-4 border-l-emerald-500' : ''}`}>
             <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><Bell className="w-4 h-4" /></div>
             <div className="flex-1"><div className="font-medium text-navy-800 text-sm">{n.title}</div><div className="text-xs text-slate-500 mt-0.5">{n.message}</div><div className="text-xs text-slate-400 mt-1">{n.time}</div></div>

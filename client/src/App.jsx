@@ -21,7 +21,8 @@ function PortalRouter() {
     case 'Technician': return <TechnicianPortal />;
     case 'Service': return <ServicePortal />;
     case 'Finance': return <FinancePortal />;
-    case 'Customer': return <CustomerPortal />;
+    case 'Customer':
+    case 'Client': return <CustomerPortal />;
     default: return <LoginPage />;
   }
 }
@@ -35,4 +36,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-

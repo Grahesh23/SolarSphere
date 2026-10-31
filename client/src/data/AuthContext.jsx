@@ -1,8 +1,5 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 
-// Role type removed (TypeScript only)
-// AuthUser interface removed (TypeScript only)
-
 export const DEMO_ACCOUNTS = [
   { id: 'usr-admin', name: 'Administrator', email: 'admin@solarsphere.demo', role: 'Admin' },
   { id: 'usr-sales', name: 'Meera Nair', email: 'sales@solarsphere.demo', role: 'Sales' },
@@ -15,38 +12,93 @@ export const DEMO_ACCOUNTS = [
 ];
 
 const AUTH_KEY = 'solarsphere-auth-v1';
+export const AUTH_TOKEN_KEY = 'solarsphere-token-v1';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 function loadUser() {
   if (typeof window === 'undefined') return null;
   try {
     const raw = window.localStorage.getItem(AUTH_KEY);
     if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
+  } catch {
+    // ignore malformed cached auth
+  }
   return null;
 }
-
-// AuthContextValue interface removed (TypeScript only)
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(loadUser);
 
-  const login = useCallback((email, password) => {
-    const account = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === email.toLowerCase().trim());
-    if (!account) return { ok: false, error: 'No account found with that email address.' };
-    if (password !== 'solarsphere123') return { ok: false, error: 'Incorrect password. Demo password is solarsphere123.' };
-    setUser(account);
-    try { window.localStorage.setItem(AUTH_KEY, JSON.stringify(account)); } catch { /* ignore */ }
-    return { ok: true };
+  const persistAuth = useCallback((authUser, token) => {
+    setUser(authUser);
+    try {
+      window.localStorage.setItem(AUTH_KEY, JSON.stringify(authUser));
+      if (token) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    } catch {
+      // ignore quota issues
+    }
   }, []);
+
+  const login = useCallback(async (email, password) => {
+    try {
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        return { ok: false, error: payload.message || 'Login failed.' };
+      }
+
+      persistAuth(payload.data.user, payload.data.token);
+      return { ok: true };
+    } catch {
+      const account = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).toLowerCase().trim());
+      if (!account) return { ok: false, error: 'No account found with that email address.' };
+      if (String(password) !== 'solarsphere123') {
+        return { ok: false, error: 'Incorrect password. Demo password is solarsphere123.' };
+      }
+
+      persistAuth(account, 'demo-token');
+      return { ok: true };
+    }
+  }, [persistAuth]);
+
+  const register = useCallback(async ({ name, email, password, phone, companyName }) => {
+    try {
+      const response = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, phone, companyName }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        return { ok: false, error: payload.message || 'Registration failed.' };
+      }
+
+      persistAuth(payload.data.user, payload.data.token);
+      return { ok: true, message: payload.message };
+    } catch {
+      return { ok: false, error: 'Unable to reach the server. Please try again.' };
+    }
+  }, [persistAuth]);
 
   const logout = useCallback(() => {
     setUser(null);
-    try { window.localStorage.removeItem(AUTH_KEY); } catch { /* ignore */ }
+    try {
+      window.localStorage.removeItem(AUTH_KEY);
+      window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    } catch {
+      // ignore quota issues
+    }
   }, []);
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
@@ -64,7 +116,8 @@ export function roleRoute(role) {
     case 'Technician': return 'technician';
     case 'Service': return 'service';
     case 'Finance': return 'finance';
-    case 'Customer': return 'customer';
+    case 'Customer':
+    case 'Client': return 'customer';
+    default: return '';
   }
 }
-

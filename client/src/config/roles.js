@@ -133,5 +133,5 @@ export const ROLE_CONFIGS = {
   Service: { role: 'Service', title: 'Service & Support', subtitle: 'Warranty & Repairs', accent: 'rose', items: serviceItems, groups: ['Service'] },
   Finance: { role: 'Finance', title: 'Finance Manager', subtitle: 'Accounting & Reports', accent: 'navy', items: financeItems, groups: ['Finance'] },
   Customer: { role: 'Customer', title: 'Customer Portal', subtitle: 'My Solar Journey', accent: 'emerald', items: customerItems, groups: ['My Solar Journey'] },
+  Client: { role: 'Client', title: 'Customer Portal', subtitle: 'My Solar Journey', accent: 'emerald', items: customerItems, groups: ['My Solar Journey'] },
 };
-
