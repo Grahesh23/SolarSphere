@@ -60,7 +60,8 @@ const ensureCustomerProfile = async (user) => {
 };
 
 const serialize = (document) => {
-  const { _id, __v, ...fields } = document;
+  const value = document?.toObject ? document.toObject() : document;
+  const { _id, __v, ...fields } = value;
   return JSON.parse(JSON.stringify({ id: _id, ...fields }));
 };
 
