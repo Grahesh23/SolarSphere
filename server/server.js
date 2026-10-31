@@ -4,9 +4,9 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
-import User from './models/user-management/User.js';
 import authRoutes from './routes/authRoutes.js';
 import adminUserRoutes from './routes/adminUserRoutes.js';
+import workflowRoutes from './routes/workflowRoutes.js';
 
 dotenv.config();
 
@@ -31,6 +31,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminUserRoutes);
+app.use('/api/workflow', workflowRoutes);
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
@@ -42,27 +43,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-const seedDefaultAdmin = async () => {
-  const adminEmail = 'admin@solarsphere.demo';
-  const existingAdmin = await User.findOne({ email: adminEmail });
-
-  if (!existingAdmin) {
-    await User.create({
-      name: 'System Admin',
-      email: adminEmail,
-      password: 'solarsphere123',
-      role: 'Admin',
-      phone: '+91 00000 00000',
-      companyName: 'SolarSphere',
-    });
-
-    console.log('✅ Default admin seeded: admin@solarsphere.demo / solarsphere123');
-  }
-};
-
 connectDB()
-  .then(async () => {
-    await seedDefaultAdmin();
+  .then(() => {
     app.listen(PORT, () => {
       console.log(`🚀 SolarSphere server running on http://localhost:${PORT}`);
     });

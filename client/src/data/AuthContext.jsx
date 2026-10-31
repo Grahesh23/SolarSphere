@@ -1,23 +1,16 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 
-export const DEMO_ACCOUNTS = [
-  { id: 'usr-admin', name: 'Administrator', email: 'admin@solarsphere.demo', role: 'Admin' },
-  { id: 'usr-sales', name: 'Meera Nair', email: 'sales@solarsphere.demo', role: 'Sales' },
-  { id: 'usr-survey', name: 'Arjun Verma', email: 'survey@solarsphere.demo', role: 'Surveyor', technicianId: 'tech-1' },
-  { id: 'usr-warehouse', name: 'Farhan Ahmed', email: 'warehouse@solarsphere.demo', role: 'Warehouse' },
-  { id: 'usr-technician', name: 'Suresh Kumar', email: 'technician@solarsphere.demo', role: 'Technician', technicianId: 'tech-3' },
-  { id: 'usr-service', name: 'Sneha Rao', email: 'service@solarsphere.demo', role: 'Service' },
-  { id: 'usr-finance', name: 'Farhan Ahmed', email: 'finance@solarsphere.demo', role: 'Finance' },
-  { id: 'usr-customer', name: 'Rajesh Sharma', email: 'customer@solarsphere.demo', role: 'Customer', customerId: 'cus-1' },
-];
-
-const AUTH_KEY = 'solarsphere-auth-v1';
-export const AUTH_TOKEN_KEY = 'solarsphere-token-v1';
+const AUTH_KEY = 'solarsphere-auth-v2';
+const LEGACY_AUTH_KEY = 'solarsphere-auth-v1';
+export const AUTH_TOKEN_KEY = 'solarsphere-token-v2';
+const LEGACY_AUTH_TOKEN_KEY = 'solarsphere-token-v1';
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 function loadUser() {
   if (typeof window === 'undefined') return null;
   try {
+    window.localStorage.removeItem(LEGACY_AUTH_KEY);
+    window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
     const raw = window.localStorage.getItem(AUTH_KEY);
     if (raw) return JSON.parse(raw);
   } catch {
@@ -57,14 +50,7 @@ export function AuthProvider({ children }) {
       persistAuth(payload.data.user, payload.data.token);
       return { ok: true };
     } catch {
-      const account = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).toLowerCase().trim());
-      if (!account) return { ok: false, error: 'No account found with that email address.' };
-      if (String(password) !== 'solarsphere123') {
-        return { ok: false, error: 'Incorrect password. Demo password is solarsphere123.' };
-      }
-
-      persistAuth(account, 'demo-token');
-      return { ok: true };
+      return { ok: false, error: 'Unable to reach the server. Please try again.' };
     }
   }, [persistAuth]);
 

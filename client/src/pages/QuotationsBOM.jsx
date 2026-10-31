@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Plus, FileText, CheckCircle2, XCircle, Download, ListChecks, Send } from 'lucide-react';
 import { useData } from '@/data/DataContext';
 import { PageContainer } from '@/components/layout/MobileSidebar';
@@ -7,26 +7,31 @@ import { DataTable } from '@/components/ui/DataTable';
 import { StatusBadgeAuto, AlertBanner, EmptyState } from '@/components/ui/Status';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { fmtINR, fmtDate, genId } from '@/lib/format';
+import { fmtINR, fmtDate } from '@/lib/format';
+import { useWorkflow } from '@/data/WorkflowContext';
+import { useAuth } from '@/data/AuthContext';
 
 export function QuotationsBOM() {
-  const { data, setData } = useData();
+  const { user } = useAuth();
+  const { data } = useData();
+  const { customers, projects, surveys, quotations, loading, error, request, refresh } = useWorkflow();
   const [selected, setSelected] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [approveTarget, setApproveTarget] = useState(null);
   const [sendTarget, setSendTarget] = useState(null);
+  const [actionError, setActionError] = useState('');
 
-  const activeQuote = selected ? data.quotations.find((q) => q.id === selected.id) ?? selected : null;
-  const activeProject = activeQuote ? data.projects.find((p) => p.id === activeQuote.projectId) : null;
-  const activeCustomer = activeQuote ? data.customers.find((c) => c.id === activeQuote.customerId) : null;
-  const survey = activeProject ? data.surveys.find((s) => s.id === activeProject.surveyId) : null;
+  const activeQuote = selected ? quotations.find((q) => q.id === selected.id) ?? selected : null;
+  const activeProject = activeQuote ? projects.find((p) => p.id === activeQuote.projectId) : null;
+  const activeCustomer = activeQuote ? customers.find((c) => c.id === activeQuote.customerId) : null;
+  const survey = activeProject ? surveys.find((s) => s.id === activeProject.surveyId) : null;
 
   const columns = [
     { key: 'code', label: 'Code', sortValue: (r) => r.code, render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
     {
       key: 'project', label: 'Project / Customer', sortValue: (r) => r.code, render: (r) => {
-        const proj = data.projects.find((p) => p.id === r.projectId);
-        const cust = data.customers.find((c) => c.id === r.customerId);
+        const proj = projects.find((p) => p.id === r.projectId);
+        const cust = customers.find((c) => c.id === r.customerId);
         return <div><div className="font-medium text-navy-800">{proj?.code}</div><div className="text-xs text-slate-400">{cust?.name}</div></div>;
       },
     },
@@ -38,62 +43,38 @@ export function QuotationsBOM() {
     { key: 'status', label: 'Status', sortValue: (r) => r.status, render: (r) => <StatusBadgeAuto status={r.status} /> },
   ];
 
-  const approveBOM = () => {
+  const approveBOM = async () => {
     if (!approveTarget) return;
-    setData((p) => ({ ...p, quotations: p.quotations.map((q) => q.id === approveTarget.id ? { ...q, bomApproved: true } : q) }));
-    setApproveTarget(null);
+    try {
+      await request(`/workflow/quotations/${approveTarget.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'approve' }) });
+      await refresh();
+      setApproveTarget(null);
+    } catch (requestError) { setActionError(requestError.message); }
   };
 
-  const sendQuote = () => {
+  const sendQuote = async () => {
     if (!sendTarget) return;
-    setData((p) => ({ ...p, quotations: p.quotations.map((q) => q.id === sendTarget.id ? { ...q, status: 'Sent' } : q) }));
-    setSendTarget(null);
+    try {
+      await request(`/workflow/quotations/${sendTarget.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'send' }) });
+      await refresh();
+      setSendTarget(null);
+    } catch (requestError) { setActionError(requestError.message); }
   };
 
   const [form, setForm] = useState({ projectId: '' });
-  const createQuote = () => {
+  const createQuote = async () => {
     if (!form.projectId) return;
-    const proj = data.projects.find((p) => p.id === form.projectId);
-    if (!proj) return;
-    const survey = data.surveys.find((s) => s.id === proj.surveyId);
-    if (!survey || survey.status !== 'Approved') {
-      alert('Survey must be approved before generating a quotation.');
-      return;
-    }
-    const config = data.configs.find((c) => c.id === proj.configId);
-    const items = [
-      { id: genId('qi'), component: 'Solar Panel 540W', category: 'Panel', qty: config?.panelCount ?? 6, unitPrice: 16500 },
-      { id: genId('qi'), component: config?.gridType === 'Off-Grid' ? 'Off-Grid Inverter' : 'String Inverter', category: 'Inverter', qty: 1, unitPrice: 62000 },
-      { id: genId('qi'), component: 'Mounting Structure Kit', category: 'Mounting', qty: 1, unitPrice: 18000 },
-      { id: genId('qi'), component: 'DC & AC Cabling', category: 'Cable', qty: 1, unitPrice: 12000 },
-    ];
-    if (config && config.batteryCount > 0) {
-      items.push({ id: genId('qi'), component: '150Ah Tubular Battery', category: 'Battery', qty: config.batteryCount, unitPrice: 14500 });
-    }
-    const subtotal = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
-    const tax = Math.round(subtotal * 0.08);
-    const total = subtotal + tax;
-    const newQuote = {
-      id: genId('quo'),
-      code: `QTN-2026-${String(data.quotations.length + 1).padStart(3, '0')}`,
-      projectId: form.projectId,
-      customerId: proj.customerId,
-      status: 'Draft',
-      items,
-      subtotal,
-      tax,
-      total,
-      createdAt: new Date().toISOString().slice(0, 10),
-      validUntil: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-      bomApproved: false,
-    };
-    setData((p) => ({ ...p, quotations: [...p.quotations, newQuote], projects: p.projects.map((pr) => pr.id === form.projectId ? { ...pr, quotationId: newQuote.id, totalCost: total } : pr) }));
-    setAddOpen(false);
-    setForm({ projectId: '' });
+    setActionError('');
+    try {
+      await request(`/workflow/projects/${form.projectId}/quotations`, { method: 'POST', body: JSON.stringify({}) });
+      await refresh();
+      setAddOpen(false);
+      setForm({ projectId: '' });
+    } catch (requestError) { setActionError(requestError.message); }
   };
 
-  const eligibleProjects = data.projects.filter((p) => {
-    const s = data.surveys.find((s) => s.id === p.surveyId);
+  const eligibleProjects = projects.filter((p) => {
+    const s = surveys.find((s) => s.id === p.surveyId);
     return s?.status === 'Approved' && !p.quotationId;
   });
 
@@ -105,19 +86,20 @@ export function QuotationsBOM() {
         actions={<button className="btn-primary" onClick={() => setAddOpen(true)} disabled={eligibleProjects.length === 0}><Plus className="w-4 h-4" />Generate Quotation</button>}
       />
 
+      {(error || actionError) && <div className="card p-3 mb-4 text-sm text-rose-700 bg-rose-50">{actionError || error}</div>}
       {eligibleProjects.length === 0 && (
         <div className="mb-4">
           <AlertBanner type="info" message="No projects are ready for quotation. A survey must be approved and a configuration must exist before a quotation can be generated." />
         </div>
       )}
 
-      <DataTable
+      {loading ? <div className="card p-8 text-center text-slate-500">Loading quotations...</div> : <DataTable
         columns={columns}
-        rows={data.quotations}
+        rows={quotations}
         searchKeys={['code']}
         searchPlaceholder="Search quotations..."
         onRowClick={setSelected}
-      />
+      />}
 
       {/* Quotation detail */}
       {activeQuote && activeProject && activeCustomer && (
@@ -129,8 +111,8 @@ export function QuotationsBOM() {
           size="xl"
           footer={
             <>
-              {activeQuote.status === 'Draft' && <button className="btn-emerald" onClick={() => setSendTarget(activeQuote)}><Send className="w-4 h-4" />Send to Customer</button>}
-              {!activeQuote.bomApproved && <button className="btn-primary" onClick={() => setApproveTarget(activeQuote)}><ListChecks className="w-4 h-4" />Approve BOM</button>}
+              {activeQuote.status === 'Draft' && ['Admin', 'Sales'].includes(user?.role) && <button className="btn-emerald" onClick={() => setSendTarget(activeQuote)}><Send className="w-4 h-4" />Send to Customer</button>}
+              {!activeQuote.bomApproved && user?.role === 'Admin' && <button className="btn-primary" onClick={() => setApproveTarget(activeQuote)}><ListChecks className="w-4 h-4" />Approve BOM</button>}
               <button className="btn-outline"><Download className="w-4 h-4" />Export PDF</button>
               <button className="btn-ghost" onClick={() => setSelected(null)}>Close</button>
             </>
@@ -168,8 +150,8 @@ export function QuotationsBOM() {
                     </tr>
                   </thead>
                   <tbody>
-                    {activeQuote.items.map((item) => (
-                      <tr key={item.id} className="border-b border-slate-100">
+                    {activeQuote.items.map((item, index) => (
+                            <tr key={item.id || index} className="border-b border-slate-100">
                         <td className="px-4 py-2.5 text-navy-800">{item.component}</td>
                         <td className="px-4 py-2.5"><span className="badge-navy">{item.category}</span></td>
                         <td className="px-4 py-2.5 text-right">{item.qty}</td>
@@ -197,11 +179,11 @@ export function QuotationsBOM() {
                     </tr>
                   </thead>
                   <tbody>
-                    {activeQuote.items.map((item) => {
+                    {activeQuote.items.map((item, index) => {
                       const inv = data.inventory.find((i) => i.category === item.category || i.name.toLowerCase().includes(item.component.toLowerCase().split(' ')[0]));
                       const enough = inv ? inv.stock >= item.qty : false;
                       return (
-                        <tr key={item.id} className="border-b border-slate-100">
+                        <tr key={item.id || index} className="border-b border-slate-100">
                           <td className="px-4 py-2.5 text-navy-800">{item.component}</td>
                           <td className="px-4 py-2.5 text-right">{item.qty}</td>
                           <td className="px-4 py-2.5 text-slate-600">{inv?.name ?? 'No match'}</td>
@@ -234,7 +216,7 @@ export function QuotationsBOM() {
           <select className="input" value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}>
             <option value="">Select project...</option>
             {eligibleProjects.map((p) => {
-              const c = data.customers.find((c) => c.id === p.customerId);
+              const c = customers.find((c) => c.id === p.customerId);
               return <option key={p.id} value={p.id}>{p.code} — {c?.name}</option>;
             })}
           </select>

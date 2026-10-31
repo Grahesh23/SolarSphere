@@ -1,18 +1,20 @@
 import { createContext, useContext, useState, useCallback } from 'react';
-import { SEED_DATA } from './seed';
+import { EMPTY_DATA } from './emptyData';
 
-const STORAGE_KEY = 'solarsphere-data-v1';
+const STORAGE_KEY = 'solarsphere-data-v2';
+const LEGACY_STORAGE_KEY = 'solarsphere-data-v1';
 
 function loadInitial() {
   if (typeof window !== 'undefined') {
     try {
+      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) return JSON.parse(raw);
     } catch {
       // ignore
     }
   }
-  return SEED_DATA;
+  return EMPTY_DATA;
 }
 
 // DataContextValue interface removed (TypeScript only)
@@ -35,7 +37,7 @@ export function DataProvider({ children }) {
   }, []);
 
   const resetData = useCallback(() => {
-    setDataState(SEED_DATA);
+    setDataState(EMPTY_DATA);
     try {
       window.localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -55,4 +57,3 @@ export function useData() {
   if (!ctx) throw new Error('useData must be used within DataProvider');
   return ctx;
 }
-

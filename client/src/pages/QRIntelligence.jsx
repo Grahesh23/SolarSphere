@@ -247,18 +247,12 @@ export function QRIntelligence() {
         </Modal>
       )}
 
-      {/* Scan modal (simulated) */}
-      <Modal open={scanOpen} onClose={() => setScanOpen(false)} title="QR Code Scanner" description="Camera-based QR scanning (simulated for demo)"
+      <Modal open={scanOpen} onClose={() => setScanOpen(false)} title="QR Code Scanner" description="Camera-based QR scanning is not configured."
         footer={<button className="btn-ghost" onClick={() => setScanOpen(false)}>Close</button>}
       >
         <div className="flex flex-col items-center py-6">
-          <div className="relative w-56 h-56 rounded-xl bg-navy-950 overflow-hidden flex items-center justify-center">
-            <div className="absolute inset-4 border-2 border-grape-400/50 rounded-lg" />
-            <div className="absolute left-4 right-4 h-0.5 bg-emerald-400 animate-pulse" style={{ top: '50%' }} />
-            <Camera className="w-12 h-12 text-white/30" />
-          </div>
-          <p className="text-sm text-slate-500 mt-4">Point the camera at a SolarSphere QR label.</p>
-          <button className="btn-grape mt-4" onClick={() => { if (data.equipment[0]) { setSelected(data.equipment[0]); setScanOpen(false); } }}>Simulate Scan</button>
+          <Camera className="w-12 h-12 text-slate-300" />
+          <p className="text-sm text-slate-500 mt-4">Connect a camera scanner to look up equipment by its QR code.</p>
         </div>
       </Modal>
     </PageContainer>

@@ -81,7 +81,7 @@ function CustomerPortalDataProvider({ children }) {
   }, [attempt]);
 
   const value = useMemo(
-    () => ({ portalData, setPortalData, error, loading, retry: () => setAttempt((value) => value + 1) }),
+    () => ({ portalData, setPortalData, error, loading, refresh: () => setAttempt((value) => value + 1), retry: () => setAttempt((value) => value + 1) }),
     [portalData, error, loading]
   );
 
@@ -154,14 +154,80 @@ function useCustomerPortalData() {
 
 function CustDashboard({ onNavigate }) {
   const d = useMyData();
+  const { refresh } = useCustomerPortalData();
   const { user } = useAuth();
+  const [enquiryOpen, setEnquiryOpen] = useState(false);
+  const [enquiryForm, setEnquiryForm] = useState({
+    phone: d.customer?.phone || '',
+    address: d.customer?.address || '',
+    city: d.customer?.city || '',
+    state: d.customer?.state || '',
+    pincode: d.customer?.pincode || '',
+    electricityConsumption: d.customer?.electricityConsumption || 0,
+    monthlyBill: d.customer?.monthlyBill || 0,
+    desiredCapacity: d.customer?.desiredCapacity || 3,
+  });
+  const [enquirySaving, setEnquirySaving] = useState(false);
+  const [enquiryError, setEnquiryError] = useState('');
+  const [enquirySuccess, setEnquirySuccess] = useState('');
+  const hasSubmittedEnquiry = Boolean(d.customer && d.customer.enquirySource !== 'Client registration');
   const project = d.projects[0];
   const config = d.projects[0] ? d.configs.find((item) => item.id === d.projects[0].configId) : null;
   const pendingPay = d.payments.filter((p) => p.status === 'Pending' || p.status === 'Overdue').reduce((s, p) => s + p.amount, 0);
 
+  const submitEnquiry = async (event) => {
+    event.preventDefault();
+    setEnquirySaving(true);
+    setEnquiryError('');
+    setEnquirySuccess('');
+    try {
+      const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) throw new Error('Your session is missing. Please sign in again.');
+      const response = await fetch(`${API_BASE}/auth/customer-enquiries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify(enquiryForm),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || 'Could not submit your enquiry.');
+      setEnquirySuccess(payload.message || 'Your enquiry was submitted.');
+      setEnquiryOpen(false);
+      await refresh();
+    } catch (error) {
+      setEnquiryError(error.message || 'Could not submit your enquiry.');
+    } finally {
+      setEnquirySaving(false);
+    }
+  };
+
   return (
     <PageContainer>
-      <PageHeader title={`Welcome, ${user?.name?.split(' ')[0]}`} description="Your solar installation journey at a glance." />
+      <PageHeader
+        title={`Welcome, ${user?.name?.split(' ')[0]}`}
+        description="Your solar installation journey at a glance."
+        actions={!hasSubmittedEnquiry && <button className="btn-primary" onClick={() => { setEnquiryError(''); setEnquiryOpen(true); }}><Plus className="w-4 h-4" />Make an Enquiry</button>}
+      />
+      {enquirySuccess && <div className="card p-3 mb-4 bg-emerald-50 text-sm text-emerald-700">{enquirySuccess}</div>}
+      {enquiryError && <div className="card p-3 mb-4 bg-rose-50 text-sm text-rose-700">{enquiryError}</div>}
+      {hasSubmittedEnquiry && d.customer && (
+        <div className="card p-5 mb-5 border-navy-100">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-navy-50 text-navy-600 flex items-center justify-center shrink-0">
+                <ClipboardCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-display font-bold text-navy-900">Your enquiry</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {d.customer.code ? `Reference ${d.customer.code}` : 'Your customer profile is registered.'}
+                  {d.customer.city ? ` Â· ${d.customer.city}` : ''}
+                </p>
+              </div>
+            </div>
+            <StatusBadgeAuto status={d.customer.leadStatus || 'New'} />
+          </div>
+        </div>
+      )}
       {project && (
         <div className="card p-6 mb-5 bg-gradient-to-br from-navy-50 to-emerald-50 border-emerald-200">
           <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -171,7 +237,7 @@ function CustDashboard({ onNavigate }) {
                 <span className="font-display font-bold text-navy-900 text-lg">{project.code}</span>
                 <StatusBadgeAuto status={project.status} />
               </div>
-              <div className="text-sm text-slate-600">{project.capacity} kW {project.gridType} system · {project.location}</div>
+              <div className="text-sm text-slate-600">{project.capacity} kW {project.gridType} system Â· {project.location}</div>
             </div>
             <div className="text-right">
               <div className="text-3xl font-display font-bold text-navy-900">{project.completion}%</div>
@@ -185,9 +251,9 @@ function CustDashboard({ onNavigate }) {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <KpiCard label="My Project" value={project?.code ?? '—'} icon={PanelTop} tone="navy" onClick={() => onNavigate('project')} />
+        <KpiCard label="My Project" value={project?.code ?? 'â€”'} icon={PanelTop} tone="navy" onClick={() => onNavigate('project')} />
         <KpiCard label="Pending Payments" value={fmtINR(pendingPay)} icon={IndianRupee} tone={pendingPay > 0 ? 'rose' : 'emerald'} onClick={() => onNavigate('payments')} />
-        <KpiCard label="Quotation" value={d.quotations.length ? d.quotations[0].code : '—'} icon={FileText} tone="grape" onClick={() => onNavigate('quotation')} />
+        <KpiCard label="Quotation" value={d.quotations.length ? d.quotations[0].code : 'â€”'} icon={FileText} tone="grape" onClick={() => onNavigate('quotation')} />
         <KpiCard label="Warranties" value={d.warranties.length} icon={ShieldCheck} tone="emerald" onClick={() => onNavigate('warranty')} />
       </div>
 
@@ -224,6 +290,24 @@ function CustDashboard({ onNavigate }) {
           </div>
         </div>
       </div>
+      <Modal
+        open={enquiryOpen}
+        onClose={() => setEnquiryOpen(false)}
+        title="Make a Solar Enquiry"
+        description="Tell our team how to contact you and what kind of solar system you are considering."
+        footer={<><button type="button" className="btn-outline" onClick={() => setEnquiryOpen(false)} disabled={enquirySaving}>Cancel</button><button type="submit" form="customer-enquiry-form" className="btn-primary" disabled={enquirySaving}>{enquirySaving ? 'Submitting...' : 'Submit Enquiry'}</button></>}
+      >
+        <form id="customer-enquiry-form" onSubmit={submitEnquiry} className="grid grid-cols-2 gap-3">
+          {enquiryError && <div className="col-span-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{enquiryError}</div>}
+          <div className="col-span-2"><label className="label">Contact phone *</label><input className="input" type="tel" value={enquiryForm.phone} onChange={(event) => setEnquiryForm({ ...enquiryForm, phone: event.target.value })} required /></div>
+          <div><label className="label">City</label><input className="input" value={enquiryForm.city} onChange={(event) => setEnquiryForm({ ...enquiryForm, city: event.target.value })} /></div>
+          <div><label className="label">State</label><input className="input" value={enquiryForm.state} onChange={(event) => setEnquiryForm({ ...enquiryForm, state: event.target.value })} /></div>
+          <div className="col-span-2"><label className="label">Address</label><input className="input" value={enquiryForm.address} onChange={(event) => setEnquiryForm({ ...enquiryForm, address: event.target.value })} /></div>
+          <div><label className="label">Monthly electricity use (kWh)</label><input className="input" type="number" min="0" value={enquiryForm.electricityConsumption} onChange={(event) => setEnquiryForm({ ...enquiryForm, electricityConsumption: Number(event.target.value) })} /></div>
+          <div><label className="label">Monthly electricity bill (â‚¹)</label><input className="input" type="number" min="0" value={enquiryForm.monthlyBill} onChange={(event) => setEnquiryForm({ ...enquiryForm, monthlyBill: Number(event.target.value) })} /></div>
+          <div><label className="label">Desired system capacity (kW) *</label><input className="input" type="number" min="0.1" max="100" step="0.1" value={enquiryForm.desiredCapacity} onChange={(event) => setEnquiryForm({ ...enquiryForm, desiredCapacity: Number(event.target.value) })} required /></div>
+        </form>
+      </Modal>
     </PageContainer>
   );
 }
@@ -256,9 +340,9 @@ function MyProjectPage() {
           {config ? (
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-slate-500">Recommended</span><span className="text-navy-800">{config.recommendedCapacity} kW</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Panels</span><span className="text-navy-800">{config.panelCount} × {config.panelModel}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Panels</span><span className="text-navy-800">{config.panelCount} Ã— {config.panelModel}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Inverter</span><span className="text-navy-800">{config.inverterModel}</span></div>
-              {config.batteryCount > 0 && <div className="flex justify-between"><span className="text-slate-500">Batteries</span><span className="text-navy-800">{config.batteryCount} × {config.batteryModel}</span></div>}
+              {config.batteryCount > 0 && <div className="flex justify-between"><span className="text-slate-500">Batteries</span><span className="text-navy-800">{config.batteryCount} Ã— {config.batteryModel}</span></div>}
               <div className="flex justify-between"><span className="text-slate-500">Est. Annual Output</span><span className="text-navy-800">{fmtNum(config.estimatedAnnual)} kWh</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Est. Payback</span><span className="text-navy-800">{config.paybackYears} years</span></div>
             </div>
@@ -269,9 +353,9 @@ function MyProjectPage() {
         <div className="card p-5 mt-5">
           <h3 className="section-title mb-3">Survey Summary</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><div className="text-xs text-slate-500">Usable Area</div><div className="font-medium text-navy-800">{survey.usableArea} m²</div></div>
+            <div><div className="text-xs text-slate-500">Usable Area</div><div className="font-medium text-navy-800">{survey.usableArea} mÂ²</div></div>
             <div><div className="text-xs text-slate-500">Orientation</div><div className="font-medium text-navy-800">{survey.orientation}</div></div>
-            <div><div className="text-xs text-slate-500">Tilt</div><div className="font-medium text-navy-800">{survey.tilt}°</div></div>
+            <div><div className="text-xs text-slate-500">Tilt</div><div className="font-medium text-navy-800">{survey.tilt}Â°</div></div>
             <div><div className="text-xs text-slate-500">Shading</div><div className="font-medium text-navy-800">{survey.shading}</div></div>
           </div>
         </div>
@@ -293,7 +377,7 @@ function SurveySchedulePage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="font-medium text-navy-800">{fmtDate(s.scheduledDate)}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">Surveyor: {tech?.name ?? '—'} · {tech?.phone ?? ''}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">Surveyor: {s.assignedTo || tech?.name || 'â€”'} Â· {tech?.phone ?? ''}</div>
                   {s.remarks && <div className="text-xs text-slate-500 mt-1">{s.remarks}</div>}
                 </div>
                 <StatusBadgeAuto status={s.status} />
@@ -324,9 +408,9 @@ function RecommendationPage() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-slate-500">Capacity</span><span className="font-medium text-navy-800">{config.recommendedCapacity} kW</span></div>
               <div className="flex justify-between"><span className="text-slate-500">System Type</span><span className="text-navy-800">{config.gridType}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Panels</span><span className="text-navy-800">{config.panelCount} × {config.panelModel}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Panels</span><span className="text-navy-800">{config.panelCount} Ã— {config.panelModel}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Inverter</span><span className="text-navy-800">{config.inverterModel}</span></div>
-              {config.batteryCount > 0 && <div className="flex justify-between"><span className="text-slate-500">Battery</span><span className="text-navy-800">{config.batteryCount} × {config.batteryModel}</span></div>}
+              {config.batteryCount > 0 && <div className="flex justify-between"><span className="text-slate-500">Battery</span><span className="text-navy-800">{config.batteryCount} Ã— {config.batteryModel}</span></div>}
             </div>
           </div>
           <div className="card p-5">
@@ -349,17 +433,37 @@ function RecommendationPage() {
 function QuotationPage() {
   const d = useMyData();
   const quote = d.quotations[0];
+  const { refresh } = useCustomerPortalData();
+  const [actionError, setActionError] = useState('');
+  const [saving, setSaving] = useState(false);
   if (!quote) return <PageContainer><PageHeader title="My Quotation" /><AlertBanner type="info" message="No quotation available yet. Once your survey is approved, a quotation will be generated." /></PageContainer>;
 
-  const accept = () => d.setPortalData((p) => ({ ...p, quotations: p.quotations.map((q) => q.id === quote.id ? { ...q, status: 'Accepted' } : q), projects: p.projects.map((pr) => pr.id === quote.projectId ? { ...pr, status: 'Customer Approved' } : pr) }));
-  const reject = () => d.setPortalData((p) => ({ ...p, quotations: p.quotations.map((q) => q.id === quote.id ? { ...q, status: 'Rejected' } : q) }));
+  const decide = async (decision) => {
+    setSaving(true);
+    setActionError('');
+    try {
+      const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+      const response = await fetch(`${API_BASE}/auth/quotations/${quote.id}/decision`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ decision }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || 'Could not save your quotation decision.');
+      await refresh();
+    } catch (requestError) {
+      setActionError(requestError.message || 'Could not save your quotation decision.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <PageContainer>
       <PageHeader title="My Quotation" description="Review and accept your solar quotation." actions={<button className="btn-outline"><Download className="w-4 h-4" />Download PDF</button>} />
       <div className="card p-5 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <div><div className="font-display font-bold text-navy-900">{quote.code}</div><div className="text-xs text-slate-500">Created {fmtDate(quote.createdAt)} · Valid until {fmtDate(quote.validUntil)}</div></div>
+          <div><div className="font-display font-bold text-navy-900">{quote.code}</div><div className="text-xs text-slate-500">Created {fmtDate(quote.createdAt)} Â· Valid until {fmtDate(quote.validUntil)}</div></div>
           <StatusBadgeAuto status={quote.status} />
         </div>
         <table className="w-full text-sm">
@@ -385,10 +489,11 @@ function QuotationPage() {
       </div>
       {quote.status === 'Sent' && (
         <div className="flex items-center gap-3">
-          <button className="btn-emerald" onClick={accept}><CheckCircle2 className="w-4 h-4" />Accept Quotation</button>
-          <button className="btn-outline" onClick={reject}><XCircle className="w-4 h-4" />Reject</button>
+          <button className="btn-emerald" onClick={() => decide('accept')} disabled={saving}><CheckCircle2 className="w-4 h-4" />{saving ? 'Saving...' : 'Accept Quotation'}</button>
+          <button className="btn-outline" onClick={() => decide('reject')} disabled={saving}><XCircle className="w-4 h-4" />Reject</button>
         </div>
       )}
+      {actionError && <p className="mt-3 text-sm text-rose-600">{actionError}</p>}
       {quote.status === 'Accepted' && <AlertBanner type="success" message="Quotation accepted! Your project will proceed to the next stage." />}
     </PageContainer>
   );
@@ -456,7 +561,7 @@ function InstallationTrackingPage() {
           </div>
           <div className="mt-4 text-sm text-slate-600">
             Current status: <span className="font-semibold text-navy-800">{project.status}</span>
-            {installation && <div className="mt-1 text-xs text-slate-500">Installation: {fmtDate(installation.scheduledDate)} · <StatusBadgeAuto status={installation.status} /></div>}
+            {installation && <div className="mt-1 text-xs text-slate-500">Installation: {fmtDate(installation.scheduledDate)} Â· <StatusBadgeAuto status={installation.status} /></div>}
           </div>
         </div>
       ) : <p className="text-sm text-slate-400">No project to track.</p>}
@@ -477,8 +582,8 @@ function EquipmentPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="font-medium text-navy-800">{item?.name ?? eq.serialNumber}</div>
-                  <div className="text-xs text-slate-500">{item?.brand} · Serial: <span className="font-mono">{eq.serialNumber}</span></div>
-                  <div className="text-xs text-slate-500 mt-0.5">Delivered: {eq.deliveredAt ? fmtDate(eq.deliveredAt) : '—'}</div>
+                  <div className="text-xs text-slate-500">{item?.brand} Â· Serial: <span className="font-mono">{eq.serialNumber}</span></div>
+                  <div className="text-xs text-slate-500 mt-0.5">Delivered: {eq.deliveredAt ? fmtDate(eq.deliveredAt) : 'â€”'}</div>
                 </div>
                 <StatusBadgeAuto status={eq.status} />
               </div>
@@ -506,7 +611,7 @@ function WarrantyPage() {
                 <div>
                   <div className="font-medium text-navy-800">{item?.name ?? 'Equipment'}</div>
                   <div className="text-xs text-slate-500 mt-0.5">{w.terms}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{fmtDate(w.startDate)} — {fmtDate(w.endDate)}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{fmtDate(w.startDate)} â€” {fmtDate(w.endDate)}</div>
                 </div>
                 <StatusBadgeAuto status={w.status} />
               </div>
@@ -544,7 +649,7 @@ function ServicePage() {
       <div className="space-y-2">
         {d.services.map((s) => (
           <div key={s.id} className="card p-4 flex items-start justify-between gap-3">
-            <div><div className="font-medium text-navy-800">{s.code} — {s.subject}</div><div className="text-xs text-slate-500 mt-0.5">{s.description}</div><div className="text-xs text-slate-400 mt-1">{fmtDate(s.createdAt)}</div></div>
+            <div><div className="font-medium text-navy-800">{s.code} â€” {s.subject}</div><div className="text-xs text-slate-500 mt-0.5">{s.description}</div><div className="text-xs text-slate-400 mt-1">{fmtDate(s.createdAt)}</div></div>
             <div className="flex items-center gap-2">
               <StatusBadgeAuto status={s.status} />
               {s.status === 'Resolved' && !s.customerConfirmed && <button className="btn-emerald text-xs" onClick={() => confirm(s)}>Confirm Resolved</button>}

@@ -21,7 +21,7 @@ const EMPTY_FORM = {
 
 async function adminRequest(path, options = {}) {
   const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
-  if (!token || token === 'demo-token') {
+  if (!token) {
     throw new Error('Please sign out and sign in with the administrator account stored in the database.');
   }
 

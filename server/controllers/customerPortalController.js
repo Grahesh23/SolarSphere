@@ -2,6 +2,9 @@ import mongoose from 'mongoose';
 import Customer from '../models/user-management/Customer.js';
 import ApiError from '../utils/apiError.js';
 import { sendSuccess } from '../utils/apiResponse.js';
+import Project from '../models/project-management/Project.js';
+import RoofSurvey from '../models/project-management/RoofSurvey.js';
+import Quotation from '../models/project-management/Quotation.js';
 
 const ensureCustomerProfile = async (user) => {
   let customer = user.customerId
@@ -108,7 +111,20 @@ export const getCustomerPortal = async (req, res, next) => {
     }
 
     const customer = await ensureCustomerProfile(req.user);
-    const projects = await findCustomerRecords('projects', customer._id);
+    const [projectDocuments, surveyDocuments, quotationDocuments] = await Promise.all([
+      Project.find({ customerId: customer._id }).sort({ createdAt: -1 }),
+      RoofSurvey.find({ customerId: customer._id }).sort({ scheduledDate: -1 }),
+      Quotation.find({ customerId: customer._id }).sort({ createdAt: -1 }),
+    ]);
+    const projects = projectDocuments.map(serialize);
+    const surveys = surveyDocuments.map(serialize);
+    const quotations = quotationDocuments.map((quotation) => ({
+      ...serialize(quotation),
+      items: quotation.items.map((item) => ({
+        ...serialize(item),
+        id: item._id.toString(),
+      })),
+    }));
     const projectIds = projects.map((project) => project.id);
 
     const configIds = projects.map((project) => project.configId).filter(Boolean);
@@ -116,8 +132,6 @@ export const getCustomerPortal = async (req, res, next) => {
     const productIds = equipment.map((unit) => unit.itemId).filter(Boolean);
 
     const [
-      surveys,
-      quotations,
       payments,
       services,
       warranties,
@@ -125,8 +139,6 @@ export const getCustomerPortal = async (req, res, next) => {
       notifications,
       technicians,
     ] = await Promise.all([
-      findCustomerRecords('roofsurveys', customer._id, projectIds),
-      findCustomerRecords('quotations', customer._id, projectIds),
       findCustomerRecords('payments', customer._id, projectIds),
       findCustomerRecords('servicetickets', customer._id, projectIds),
       findCustomerRecords('warranties', customer._id, projectIds),
@@ -159,6 +171,55 @@ export const getCustomerPortal = async (req, res, next) => {
       },
       'Customer portal data retrieved successfully.'
     );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const submitCustomerEnquiry = async (req, res, next) => {
+  try {
+    if (!['Client', 'Customer'].includes(req.user.role)) {
+      return next(new ApiError(403, 'Only client accounts can submit a customer enquiry.'));
+    }
+
+    const { phone, address, city, state, pincode, electricityConsumption, monthlyBill, desiredCapacity } = req.body;
+    if (!phone?.trim()) {
+      return next(new ApiError(400, 'A contact phone number is required.'));
+    }
+
+    const capacity = Number(desiredCapacity);
+    if (!Number.isFinite(capacity) || capacity <= 0 || capacity > 100) {
+      return next(new ApiError(400, 'Desired system capacity must be greater than 0 and no more than 100 kW.'));
+    }
+
+    const numericFields = [
+      ['electricityConsumption', electricityConsumption],
+      ['monthlyBill', monthlyBill],
+    ];
+    for (const [field, value] of numericFields) {
+      if (value !== undefined && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+        return next(new ApiError(400, `${field} must be a non-negative number.`));
+      }
+    }
+
+    const customer = await ensureCustomerProfile(req.user);
+    if (customer.enquirySource !== 'Client registration') {
+      return next(new ApiError(409, 'An enquiry is already on file for your account.'));
+    }
+
+    customer.phone = phone.trim();
+    customer.address = address?.trim() || '';
+    customer.city = city?.trim() || '';
+    customer.state = state?.trim() || '';
+    customer.pincode = pincode?.trim() || '';
+    customer.electricityConsumption = Number(electricityConsumption) || 0;
+    customer.monthlyBill = Number(monthlyBill) || 0;
+    customer.desiredCapacity = capacity;
+    customer.enquirySource = 'Client Portal';
+    customer.leadStatus = 'New';
+    await customer.save();
+
+    return sendSuccess(res, 201, { customer: serialize(customer.toObject()) }, 'Your solar enquiry was submitted.');
   } catch (error) {
     next(error);
   }

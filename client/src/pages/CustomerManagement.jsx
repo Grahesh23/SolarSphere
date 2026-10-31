@@ -8,21 +8,23 @@ import { StatusBadgeAuto, EmptyState } from '@/components/ui/Status';
 import { Modal } from '@/components/ui/Modal';
 import { Timeline } from '@/components/ui/Timeline';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { fmtINR, fmtDate, genId } from '@/lib/format';
+import { fmtINR, fmtDate } from '@/lib/format';
+import { useWorkflow } from '@/data/WorkflowContext';
 
 const leadVariants = {
   New: 'slate', Contacted: 'navy', 'Survey Scheduled': 'amber', Quoted: 'grape', Won: 'emerald', Lost: 'rose',
 };
 
 export function CustomerManagement() {
-  const { data, setData } = useData();
+  const { data } = useData();
+  const { customers, projects, loading, error, request, refresh } = useWorkflow();
   const [selected, setSelected] = useState(null);
   const [filterLead, setFilterLead] = useState('All');
   const [addOpen, setAddOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const selectedCustomer = selected ? data.customers.find((c) => c.id === selected.id) ?? selected : null;
-  const selectedProjects = selectedCustomer ? data.projects.filter((p) => p.customerId === selectedCustomer.id) : [];
+  const selectedCustomer = selected ? customers.find((c) => c.id === selected.id) ?? selected : null;
+  const selectedProjects = selectedCustomer ? projects.filter((p) => p.customerId === selectedCustomer.id) : [];
   const selectedPayments = selectedCustomer ? data.payments.filter((p) => p.customerId === selectedCustomer.id) : [];
 
   const columns = [
@@ -49,29 +51,27 @@ export function CustomerManagement() {
   ];
 
   const rows = useMemo(
-    () => filterLead === 'All' ? data.customers : data.customers.filter((c) => c.leadStatus === filterLead),
-    [data.customers, filterLead]
+    () => filterLead === 'All' ? customers : customers.filter((c) => c.leadStatus === filterLead),
+    [customers, filterLead]
   );
 
   const [form, setForm] = useState({
     name: '', email: '', phone: '', address: '', city: '', state: '', pincode: '',
-    electricityConsumption: 0, monthlyBill: 0, desiredCapacity: 3, enquirySource: 'Website', assignedTo: 'Meera Nair',
+    electricityConsumption: 0, monthlyBill: 0, desiredCapacity: 3, enquirySource: 'Website',
   });
 
-  const addCustomer = () => {
+  const [actionError, setActionError] = useState('');
+  const addCustomer = async () => {
     if (!form.name || !form.phone) return;
-    const newCustomer = {
-      id: genId('cus'),
-      code: `CUST-${String(data.customers.length + 1).padStart(3, '0')}`,
-      name: form.name, email: form.email, phone: form.phone,
-      address: form.address, city: form.city, state: form.state, pincode: form.pincode,
-      electricityConsumption: form.electricityConsumption, monthlyBill: form.monthlyBill,
-      desiredCapacity: form.desiredCapacity, enquirySource: form.enquirySource, assignedTo: form.assignedTo,
-      leadStatus: 'New', createdAt: new Date().toISOString().slice(0, 10), interactions: [],
-    };
-    setData((p) => ({ ...p, customers: [newCustomer, ...p.customers] }));
-    setAddOpen(false);
-    setForm({ name: '', email: '', phone: '', address: '', city: '', state: '', pincode: '', electricityConsumption: 0, monthlyBill: 0, desiredCapacity: 3, enquirySource: 'Website', assignedTo: 'Meera Nair' });
+    setActionError('');
+    try {
+      await request('/workflow/enquiries', { method: 'POST', body: JSON.stringify(form) });
+      await refresh();
+      setAddOpen(false);
+      setForm({ name: '', email: '', phone: '', address: '', city: '', state: '', pincode: '', electricityConsumption: 0, monthlyBill: 0, desiredCapacity: 3, enquirySource: 'Website' });
+    } catch (createError) {
+      setActionError(createError.message || 'Could not save this enquiry.');
+    }
   };
 
   return (
@@ -101,14 +101,16 @@ export function CustomerManagement() {
         ))}
       </div>
 
-      <DataTable
+      {error && <div className="card p-3 mb-4 text-sm text-rose-700 bg-rose-50">{error}</div>}
+      {actionError && <div className="card p-3 mb-4 text-sm text-rose-700 bg-rose-50">{actionError}</div>}
+      {loading ? <div className="card p-8 text-center text-slate-500">Loading enquiries...</div> : <DataTable
         columns={columns}
         rows={rows}
         searchKeys={['name', 'code', 'phone', 'email', 'city']}
         searchPlaceholder="Search customers..."
         onRowClick={setSelected}
         emptyMessage="No customers in this lead stage yet."
-      />
+      />}
 
       {/* Customer detail drawer */}
       {selectedCustomer && (
@@ -210,7 +212,7 @@ export function CustomerManagement() {
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
             <label className="label">Full Name *</label>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Rajesh Sharma" />
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Customer name" />
           </div>
           <div><label className="label">Phone *</label><input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+91 ..." /></div>
           <div><label className="label">Email</label><input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="name@email.com" /></div>
@@ -221,7 +223,6 @@ export function CustomerManagement() {
           <div><label className="label">Monthly Bill (INR)</label><input type="number" className="input" value={form.monthlyBill} onChange={(e) => setForm({ ...form, monthlyBill: +e.target.value })} /></div>
           <div><label className="label">Desired Capacity (kW)</label><input type="number" className="input" value={form.desiredCapacity} onChange={(e) => setForm({ ...form, desiredCapacity: +e.target.value })} /></div>
           <div><label className="label">Enquiry Source</label><select className="input" value={form.enquirySource} onChange={(e) => setForm({ ...form, enquirySource: e.target.value })}><option>Website</option><option>Referral</option><option>Advertisement</option><option>Exhibition</option><option>Walk-in</option></select></div>
-          <div><label className="label">Assign To</label><select className="input" value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}><option>Meera Nair</option><option>Karthik Iyer</option></select></div>
         </div>
       </Modal>
     </PageContainer>

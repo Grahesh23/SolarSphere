@@ -9,6 +9,7 @@ import { TechnicianPortal } from '@/pages/technician/TechnicianPortal';
 import { ServicePortal } from '@/pages/service/ServicePortal';
 import { FinancePortal } from '@/pages/finance/FinancePortal';
 import { CustomerPortal } from '@/pages/customer/CustomerPortal';
+import { WorkflowProvider } from '@/data/WorkflowContext';
 
 function PortalRouter() {
   const { user } = useAuth();
@@ -30,9 +31,11 @@ function PortalRouter() {
 export default function App() {
   return (
     <AuthProvider>
-      <DataProvider>
-        <PortalRouter />
-      </DataProvider>
+      <WorkflowProvider>
+        <DataProvider>
+          <PortalRouter />
+        </DataProvider>
+      </WorkflowProvider>
     </AuthProvider>
   );
 }

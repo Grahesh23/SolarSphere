@@ -15,24 +15,24 @@ import { KpiCard } from '@/components/ui/KpiCard';
 import { StatusBadgeAuto } from '@/components/ui/Status';
 import { Timeline } from '@/components/ui/Timeline';
 import { fmtINR, fmtNum, fmtINRRecharts } from '@/lib/format';
-
-const revenueData = [
-  { month: 'May', revenue: 180000, expense: 142000 },
-  { month: 'Jun', revenue: 215000, expense: 158000 },
-  { month: 'Jul', revenue: 285000, expense: 201000 },
-  { month: 'Aug', revenue: 175000, expense: 130000 },
-  { month: 'Sep', revenue: 295000, expense: 210000 },
-  { month: 'Oct', revenue: 460000, expense: 305000 },
-];
-
-const projectMix = [
-  { name: 'On-Grid', value: 3, color: '#2b4787' },
-  { name: 'Off-Grid', value: 1, color: '#9333ea' },
-  { name: 'Hybrid', value: 1, color: '#10b981' },
-];
+import { getMonthlyPaymentSummary } from '@/lib/dataSummaries';
 
 export function ExecutiveDashboard({ onNavigate }) {
   const { data } = useData();
+  const revenueData = getMonthlyPaymentSummary(data.payments).map(({ month, income, expense }) => ({
+    month,
+    revenue: income,
+    expense,
+  }));
+  const projectMix = Object.entries(data.projects.reduce((totals, project) => {
+    const type = project.gridType || 'Unspecified';
+    totals[type] = (totals[type] || 0) + 1;
+    return totals;
+  }, {})).map(([name, value]) => ({
+    name,
+    value,
+    color: name === 'On-Grid' ? '#2b4787' : name === 'Off-Grid' ? '#9333ea' : '#10b981',
+  }));
 
   const kpis = useMemo(() => {
     const revenue = data.payments.filter((p) => p.status === 'Paid').reduce((s, p) => s + p.amount, 0);
@@ -83,15 +83,15 @@ export function ExecutiveDashboard({ onNavigate }) {
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 mb-6">
-        <KpiCard label="Total Customers" value={kpis.customers} icon={Users} delta={12} deltaLabel="vs last month" tone="navy" onClick={() => onNavigate('customers')} />
-        <KpiCard label="Active Projects" value={kpis.activeProjects} icon={FolderKanban} delta={8} deltaLabel="vs last month" tone="grape" onClick={() => onNavigate('projects')} />
-        <KpiCard label="Completed Installs" value={kpis.completed} icon={CheckCircle2} delta={5} tone="emerald" onClick={() => onNavigate('installations')} />
+        <KpiCard label="Total Customers" value={kpis.customers} icon={Users} tone="navy" onClick={() => onNavigate('customers')} />
+        <KpiCard label="Active Projects" value={kpis.activeProjects} icon={FolderKanban} tone="grape" onClick={() => onNavigate('projects')} />
+        <KpiCard label="Completed Installs" value={kpis.completed} icon={CheckCircle2} tone="emerald" onClick={() => onNavigate('installations')} />
         <KpiCard label="Pending Surveys" value={kpis.pendingSurveys} icon={ClipboardCheck} tone="amber" onClick={() => onNavigate('surveys')} />
         <KpiCard label="Pending Quotations" value={kpis.pendingQuotations} icon={FileText} tone="navy" onClick={() => onNavigate('quotations')} />
-        <KpiCard label="Open Tickets" value={kpis.serviceTickets} icon={Headphones} delta={-3} tone="rose" onClick={() => onNavigate('service')} />
-        <KpiCard label="Revenue (FYTD)" value={fmtINR(kpis.revenue)} icon={IndianRupee} delta={22} deltaLabel="vs last month" tone="emerald" onClick={() => onNavigate('finance')} />
-        <KpiCard label="Expenses" value={fmtINR(kpis.expenses)} icon={TrendingDown} delta={6} deltaLabel="vs last month" tone="rose" onClick={() => onNavigate('finance')} />
-        <KpiCard label="Net Profit" value={fmtINR(kpis.profit)} icon={TrendingUp} delta={34} deltaLabel="vs last month" tone="navy" onClick={() => onNavigate('finance')} />
+        <KpiCard label="Open Tickets" value={kpis.serviceTickets} icon={Headphones} tone="rose" onClick={() => onNavigate('service')} />
+        <KpiCard label="Revenue" value={fmtINR(kpis.revenue)} icon={IndianRupee} tone="emerald" onClick={() => onNavigate('finance')} />
+        <KpiCard label="Expenses" value={fmtINR(kpis.expenses)} icon={TrendingDown} tone="rose" onClick={() => onNavigate('finance')} />
+        <KpiCard label="Net Profit" value={fmtINR(kpis.profit)} icon={TrendingUp} tone="navy" onClick={() => onNavigate('finance')} />
         <KpiCard label="Low Stock Alerts" value={kpis.lowStock} icon={AlertTriangle} tone="amber" onClick={() => onNavigate('inventory')} />
         <KpiCard label="Active Warranties" value={data.warranties.length} icon={ShieldCheck} tone="emerald" onClick={() => onNavigate('warranty')} />
         <KpiCard label="Technicians Free" value={kpis.techAvailable} icon={HardHat} tone="grape" onClick={() => onNavigate('technicians')} />

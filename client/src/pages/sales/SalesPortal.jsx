@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   Users, UserPlus, Phone, FileText, FolderKanban, Bell, ClipboardCheck, TrendingUp,
-  CheckCircle2, XCircle, Calendar, IndianRupee, Sun, SlidersHorizontal, Mail, Plus,
+  CheckCircle2, XCircle, IndianRupee, Plus,
 } from 'lucide-react';
 import { useData } from '@/data/DataContext';
 import { useAuth } from '@/data/AuthContext';
@@ -10,7 +10,8 @@ import { KpiCard } from '@/components/ui/KpiCard';
 import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
 import { StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
-import { fmtINR, fmtDate, fmtNum, genId } from '@/lib/format';
+import { fmtINR, fmtDate } from '@/lib/format';
+import { useWorkflow } from '@/data/WorkflowContext';
 
 export function SalesPortal() {
   const [active, setActive] = useState('dashboard');
@@ -22,14 +23,6 @@ export function SalesPortal() {
 }
 
 function SalesPage({ active, onNavigate }) {
-  const { user } = useAuth();
-  const { data, setData } = useData();
-
-  const myCustomers = useMemo(
-    () => data.customers.filter((c) => c.assignedTo === user?.name || true),
-    [data.customers, user]
-  );
-
   switch (active) {
     case 'dashboard': return <SalesDashboard onNavigate={onNavigate} />;
     case 'enquiries': return <EnquiriesPage />;
@@ -46,13 +39,13 @@ function SalesPage({ active, onNavigate }) {
 }
 
 function SalesDashboard({ onNavigate }) {
-  const { data } = useData();
+  const { customers, projects, surveys, quotations } = useWorkflow();
   const { user } = useAuth();
-  const myLeads = data.customers.filter((c) => c.assignedTo === user?.name);
+  const myLeads = customers.filter((c) => c.assignedTo === user?.name);
   const newEnquiries = myLeads.filter((c) => c.leadStatus === 'New' || c.leadStatus === 'Contacted');
-  const surveysPending = data.surveys.filter((s) => s.status === 'Scheduled');
-  const surveysDone = data.surveys.filter((s) => s.status === 'Approved');
-  const quotesPending = data.quotations.filter((q) => q.status === 'Sent');
+  const surveysPending = surveys.filter((s) => s.status === 'Scheduled');
+  const surveysDone = surveys.filter((s) => s.status === 'Approved');
+  const quotesPending = quotations.filter((q) => q.status === 'Sent');
   const won = myLeads.filter((c) => c.leadStatus === 'Won');
   const lost = myLeads.filter((c) => c.leadStatus === 'Lost');
 
@@ -67,7 +60,7 @@ function SalesDashboard({ onNavigate }) {
         <KpiCard label="Quotes Awaiting Approval" value={quotesPending.length} icon={FileText} tone="navy" onClick={() => onNavigate('quotations')} />
         <KpiCard label="Converted Customers" value={won.length} icon={TrendingUp} tone="emerald" onClick={() => onNavigate('my-projects')} />
         <KpiCard label="Lost Leads" value={lost.length} icon={XCircle} tone="rose" />
-        <KpiCard label="Active Projects" value={data.projects.filter((p) => !['Completed', 'Handed Over'].includes(p.status)).length} icon={FolderKanban} tone="navy" onClick={() => onNavigate('my-projects')} />
+        <KpiCard label="Active Projects" value={projects.filter((p) => !['Completed', 'Handed Over'].includes(p.status)).length} icon={FolderKanban} tone="navy" onClick={() => onNavigate('my-projects')} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -95,7 +88,7 @@ function SalesDashboard({ onNavigate }) {
         <div className="card p-5">
           <h3 className="section-title mb-3">Recent Interactions</h3>
           <div className="space-y-2">
-            {data.customers.flatMap((c) => c.interactions.map((i) => ({ ...i, customer: c.name }))).slice(0, 6).map((i) => (
+            {customers.flatMap((c) => (c.interactions || []).map((i) => ({ ...i, customer: c.name }))).slice(0, 6).map((i) => (
               <div key={i.id} className="flex items-start gap-3 text-sm">
                 <div className="w-7 h-7 rounded-full bg-navy-50 text-navy-600 flex items-center justify-center shrink-0"><Phone className="w-3.5 h-3.5" /></div>
                 <div>
@@ -113,21 +106,34 @@ function SalesDashboard({ onNavigate }) {
 }
 
 function EnquiriesPage() {
-  const { data, setData } = useData();
+  const { customers, loading, error, request, refresh } = useWorkflow();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', city: '', consumption: 400, bill: 6000, capacity: 3, source: 'Website' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', city: '', consumption: 0, bill: 0, capacity: 3, source: 'Website' });
+  const [actionError, setActionError] = useState('');
 
-  const create = () => {
+  const create = async () => {
     if (!form.name || !form.phone) return;
-    const c = {
-      id: genId('cus'), code: `CUST-${String(data.customers.length + 1).padStart(3, '0')}`,
-      name: form.name, email: form.email, phone: form.phone, address: '', city: form.city, state: '', pincode: '',
-      electricityConsumption: Number(form.consumption), monthlyBill: Number(form.bill), desiredCapacity: Number(form.capacity),
-      enquirySource: form.source, assignedTo: 'Meera Nair', leadStatus: 'New', createdAt: new Date().toISOString().slice(0, 10), interactions: [],
-    };
-    setData((p) => ({ ...p, customers: [...p.customers, c] }));
-    setOpen(false);
-    setForm({ name: '', email: '', phone: '', city: '', consumption: 400, bill: 6000, capacity: 3, source: 'Website' });
+    setActionError('');
+    try {
+      await request('/workflow/enquiries', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          city: form.city,
+          electricityConsumption: form.consumption,
+          monthlyBill: form.bill,
+          desiredCapacity: form.capacity,
+          enquirySource: form.source,
+        }),
+      });
+      await refresh();
+      setOpen(false);
+      setForm({ name: '', email: '', phone: '', city: '', consumption: 0, bill: 0, capacity: 3, source: 'Website' });
+    } catch (createError) {
+      setActionError(createError.message || 'Could not create enquiry.');
+    }
   };
 
   const columns = [
@@ -143,7 +149,9 @@ function EnquiriesPage() {
   return (
     <PageContainer>
       <PageHeader title="Customer Enquiries" description="Register new customer enquiries and track initial contact." actions={<button className="btn-primary" onClick={() => setOpen(true)}><Plus className="w-4 h-4" />New Enquiry</button>} />
-      <DataTable columns={columns} rows={data.customers} searchKeys={['name', 'phone', 'city']} searchPlaceholder="Search enquiries..." />
+      {error && <div className="card p-3 mb-3 bg-rose-50 text-sm text-rose-700">{error}</div>}
+      {actionError && <div className="card p-3 mb-3 bg-rose-50 text-sm text-rose-700">{actionError}</div>}
+      {loading ? <div className="card p-8 text-center text-slate-500">Loading enquiries...</div> : <DataTable columns={columns} rows={customers} searchKeys={['name', 'phone', 'city']} searchPlaceholder="Search enquiries..." />}
       <Modal open={open} onClose={() => setOpen(false)} title="New Customer Enquiry" description="Register a new solar enquiry and assign it to yourself."
         footer={<><button className="btn-outline" onClick={() => setOpen(false)}>Cancel</button><button className="btn-primary" onClick={create}>Create Enquiry</button></>}>
         <div className="grid grid-cols-2 gap-3">
@@ -162,9 +170,9 @@ function EnquiriesPage() {
 }
 
 function LeadsPage() {
-  const { data } = useData();
+  const { customers } = useWorkflow();
   const { user } = useAuth();
-  const myLeads = data.customers.filter((c) => c.assignedTo === user?.name);
+  const myLeads = customers.filter((c) => c.assignedTo === user?.name);
   const columns = [
     { key: 'code', label: 'Code', render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
     { key: 'name', label: 'Lead', sortValue: (r) => r.name, render: (r) => <div className="font-medium text-navy-800">{r.name}</div> },
@@ -183,7 +191,7 @@ function LeadsPage() {
 }
 
 function DirectoryPage() {
-  const { data } = useData();
+  const { customers } = useWorkflow();
   const columns = [
     { key: 'code', label: 'Code', render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
     { key: 'name', label: 'Customer', sortValue: (r) => r.name, render: (r) => <div className="font-medium text-navy-800">{r.name}</div> },
@@ -194,29 +202,39 @@ function DirectoryPage() {
   return (
     <PageContainer>
       <PageHeader title="Customer Directory" description="All customer records with contact details." />
-      <DataTable columns={columns} rows={data.customers} searchKeys={['name', 'phone', 'city']} searchPlaceholder="Search customers..." />
+      <DataTable columns={columns} rows={customers} searchKeys={['name', 'phone', 'city']} searchPlaceholder="Search customers..." />
     </PageContainer>
   );
 }
 
 function FollowupsPage() {
-  const { data, setData } = useData();
+  const { customers, request, refresh } = useWorkflow();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ customerId: '', type: 'Call', note: '' });
+  const [error, setError] = useState('');
 
-  const add = () => {
+  const add = async () => {
     if (!form.customerId || !form.note) return;
-    const interaction = { id: genId('int'), date: new Date().toISOString().slice(0, 10), type: form.type, note: form.note, by: 'Meera Nair' };
-    setData((p) => ({ ...p, customers: p.customers.map((c) => c.id === form.customerId ? { ...c, interactions: [interaction, ...c.interactions] } : c) }));
-    setOpen(false);
-    setForm({ customerId: '', type: 'Call', note: '' });
+    setError('');
+    try {
+      await request(`/workflow/enquiries/${form.customerId}/followups`, {
+        method: 'POST',
+        body: JSON.stringify({ type: form.type, note: form.note }),
+      });
+      await refresh();
+      setOpen(false);
+      setForm({ customerId: '', type: 'Call', note: '' });
+    } catch (saveError) {
+      setError(saveError.message || 'Could not save follow-up.');
+    }
   };
 
   return (
     <PageContainer>
       <PageHeader title="Follow-ups & Meetings" description="Track customer interactions and scheduled follow-ups." actions={<button className="btn-primary" onClick={() => setOpen(true)}><Plus className="w-4 h-4" />Log Follow-up</button>} />
       <div className="space-y-2">
-        {data.customers.flatMap((c) => c.interactions.map((i) => ({ ...i, customer: c.name, code: c.code }))).sort((a, b) => b.date.localeCompare(a.date)).map((i) => (
+        {error && <div className="card p-3 text-sm text-rose-700 bg-rose-50">{error}</div>}
+        {customers.flatMap((c) => (c.interactions || []).map((i) => ({ ...i, customer: c.name, code: c.code }))).sort((a, b) => b.date.localeCompare(a.date)).map((i) => (
           <div key={i.id} className="card p-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-navy-50 text-navy-600 flex items-center justify-center"><Phone className="w-4 h-4" /></div>
             <div className="flex-1 min-w-0">
@@ -229,7 +247,7 @@ function FollowupsPage() {
       </div>
       <Modal open={open} onClose={() => setOpen(false)} title="Log Follow-up" footer={<><button className="btn-outline" onClick={() => setOpen(false)}>Cancel</button><button className="btn-primary" onClick={add}>Save</button></>}>
         <div className="space-y-3">
-          <div><label className="label">Customer</label><select className="input" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })}><option value="">Select...</option>{data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label className="label">Customer</label><select className="input" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })}><option value="">Select...</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label className="label">Type</label><select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option>Call</option><option>Email</option><option>Visit</option><option>WhatsApp</option></select></div>
           <div><label className="label">Notes</label><textarea className="input" rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></div>
         </div>
@@ -239,15 +257,15 @@ function FollowupsPage() {
 }
 
 function SurveyRequestsPage() {
-  const { data } = useData();
+  const { customers, projects, surveys, error, loading } = useWorkflow();
   return (
     <PageContainer>
       <PageHeader title="Roof Survey Requests" description="Track survey scheduling status for your customers." />
       <div className="space-y-2">
-        {data.surveys.map((s) => {
-          const proj = data.projects.find((p) => p.id === s.projectId);
-          const cust = data.customers.find((c) => c.id === s.customerId);
-          const tech = data.technicians.find((t) => t.id === s.technicianId);
+        {error && <div className="card p-3 text-sm text-rose-700 bg-rose-50">{error}</div>}
+        {loading ? <div className="card p-8 text-center text-slate-500">Loading surveys...</div> : surveys.map((s) => {
+          const proj = projects.find((p) => p.id === s.projectId);
+          const cust = customers.find((c) => c.id === s.customerId);
           return (
             <div key={s.id} className="card p-4 flex items-center justify-between gap-3 flex-wrap">
               <div>
@@ -255,7 +273,7 @@ function SurveyRequestsPage() {
                 <div className="text-xs text-slate-500">{proj?.code} · Scheduled {fmtDate(s.scheduledDate)}</div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-500">{tech?.name}</span>
+                <span className="text-xs text-slate-500">{s.assignedTo}</span>
                 <StatusBadgeAuto status={s.status} />
               </div>
             </div>
@@ -274,10 +292,10 @@ import { SolarConfigurationIntelligence } from '@/pages/SolarConfigurationIntell
 function SolarConfigEmbed() { return <SolarConfigurationIntelligence />; }
 
 function SalesQuotationsPage() {
-  const { data, setData } = useData();
+  const { projects, customers, quotations } = useWorkflow();
   const columns = [
     { key: 'code', label: 'Code', sortValue: (r) => r.code, render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
-    { key: 'project', label: 'Project / Customer', sortValue: (r) => r.code, render: (r) => { const p = data.projects.find((p) => p.id === r.projectId); const c = data.customers.find((c) => c.id === r.customerId); return <div><div className="font-medium text-navy-800">{p?.code}</div><div className="text-xs text-slate-400">{c?.name}</div></div>; } },
+    { key: 'project', label: 'Project / Customer', sortValue: (r) => r.code, render: (r) => { const p = projects.find((p) => p.id === r.projectId); const c = customers.find((c) => c.id === r.customerId); return <div><div className="font-medium text-navy-800">{p?.code}</div><div className="text-xs text-slate-400">{c?.name}</div></div>; } },
     { key: 'total', label: 'Total', sortValue: (r) => r.total, render: (r) => fmtINR(r.total) },
     { key: 'status', label: 'Status', sortValue: (r) => r.status, render: (r) => <StatusBadgeAuto status={r.status} /> },
     { key: 'createdAt', label: 'Created', sortValue: (r) => r.createdAt, render: (r) => fmtDate(r.createdAt) },
@@ -285,18 +303,18 @@ function SalesQuotationsPage() {
   return (
     <PageContainer>
       <PageHeader title="Quotations" description="Generate and send quotations to customers for approval." />
-      <DataTable columns={columns} rows={data.quotations} searchKeys={['code']} searchPlaceholder="Search quotations..." />
+      <DataTable columns={columns} rows={quotations} searchKeys={['code']} searchPlaceholder="Search quotations..." />
     </PageContainer>
   );
 }
 
 function MyProjectsPage() {
-  const { data } = useData();
+  const { projects, customers } = useWorkflow();
   const { user } = useAuth();
-  const myProjects = data.projects.filter((p) => p.assignedEmployees.includes(user?.name || '') || true);
+  const myProjects = projects.filter((p) => p.assignedTo === user?.name || user?.role === 'Admin');
   const columns = [
     { key: 'code', label: 'Code', render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
-    { key: 'customer', label: 'Customer', sortValue: (r) => r.code, render: (r) => { const c = data.customers.find((c) => c.id === r.customerId); return c?.name; } },
+    { key: 'customer', label: 'Customer', sortValue: (r) => r.code, render: (r) => { const c = customers.find((c) => c.id === r.customerId); return c?.name; } },
     { key: 'capacity', label: 'Capacity', render: (r) => `${r.capacity} kW ${r.gridType}` },
     { key: 'completion', label: 'Progress', sortValue: (r) => r.completion, render: (r) => <span className="badge-navy">{r.completion}%</span> },
     { key: 'status', label: 'Status', sortValue: (r) => r.status, render: (r) => <StatusBadgeAuto status={r.status} /> },

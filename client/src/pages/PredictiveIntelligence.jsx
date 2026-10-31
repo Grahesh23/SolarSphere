@@ -19,20 +19,7 @@ const SEASONS = [
   { season: 'Autumn (Sep-Nov)', generation: 560, percentage: 17 },
 ];
 
-const MONTHLY = [
-  { month: 'Jan', forecast: 180, actual: null },
-  { month: 'Feb', forecast: 200, actual: null },
-  { month: 'Mar', forecast: 260, actual: 252 },
-  { month: 'Apr', forecast: 290, actual: 288 },
-  { month: 'May', forecast: 310, actual: 305 },
-  { month: 'Jun', forecast: 340, actual: 335 },
-  { month: 'Jul', forecast: 360, actual: 358 },
-  { month: 'Aug', forecast: 345, actual: null },
-  { month: 'Sep', forecast: 280, actual: null },
-  { month: 'Oct', forecast: 240, actual: null },
-  { month: 'Nov', forecast: 200, actual: null },
-  { month: 'Dec', forecast: 175, actual: null },
-];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function PredictiveIntelligence() {
   const { data } = useData();
@@ -43,22 +30,32 @@ export function PredictiveIntelligence() {
   const customer = data.customers.find((c) => c.id === project?.customerId);
 
   const forecast = useMemo(() => {
-    const capacity = config?.recommendedCapacity ?? project?.capacity ?? 3;
+    const capacity = config?.recommendedCapacity ?? project?.capacity ?? 0;
     const annual = config?.estimatedAnnual ?? Math.round(capacity * 1650);
     const daily = Math.round(annual / 365);
     const monthly = Math.round(annual / 12);
     const savingsMonthly = Math.round((annual / 12) * 7.5);
     const savingsAnnual = savingsMonthly * 12;
-    const payback = config?.paybackYears ?? Math.round((285000 / savingsAnnual) * 10) / 10;
+    const investment = config?.estimatedCost ?? project?.totalCost ?? 0;
+    const payback = config?.paybackYears ?? (savingsAnnual > 0 && investment > 0 ? Math.round((investment / savingsAnnual) * 10) / 10 : 0);
     const lifetime25 = savingsAnnual * 25;
     const lifetime20 = savingsAnnual * 20;
     return { daily, monthly, annual, savingsMonthly, savingsAnnual, payback, lifetime25, lifetime20, capacity };
   }, [config, project]);
 
-  const forecastMonthly = MONTHLY.map((m) => ({ ...m, forecast: Math.round(m.forecast * forecast.capacity / 3) }));
+  const forecastMonthly = MONTHS.map((month) => ({ month, forecast: forecast.monthly }));
   const seasonal = SEASONS.map((s) => ({ ...s, generation: Math.round(s.generation * forecast.capacity / 3) }));
   const annualTotal = seasonal.reduce((s, x) => s + x.generation, 0);
   const totalForecastMonthly = forecastMonthly.reduce((s, x) => s + x.forecast, 0);
+
+  if (!project) {
+    return (
+      <PageContainer>
+        <PageHeader title="Predictive Intelligence" description="Forecasts are calculated for projects with recorded system capacity." />
+        <div className="card p-6 text-sm text-slate-500">No project data is available to forecast.</div>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer>
@@ -108,7 +105,7 @@ export function PredictiveIntelligence() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="section-title">Monthly Generation Forecast</h3>
-              <p className="text-xs text-slate-500 mt-0.5">kWh per month · forecast vs actual where available</p>
+              <p className="text-xs text-slate-500 mt-0.5">Estimated kWh per month · no measured generation data is available</p>
             </div>
             <Activity className="w-5 h-5 text-grape-400" />
           </div>
@@ -120,7 +117,6 @@ export function PredictiveIntelligence() {
               <Tooltip formatter={fmtKwhRecharts} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12 }} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
               <Line type="monotone" dataKey="forecast" stroke="#7e22ce" strokeWidth={2.5} dot={{ r: 3 }} name="Forecast" />
-              <Line type="monotone" dataKey="actual" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4 }} name="Actual (where available)" connectNulls={false} />
             </LineChart>
           </ResponsiveContainer>
           <div className="text-xs text-slate-400 mt-2">Total forecast: <span className="font-medium text-navy-600">{fmtNum(totalForecastMonthly)} kWh/yr</span></div>

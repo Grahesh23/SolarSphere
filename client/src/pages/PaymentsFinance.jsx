@@ -11,25 +11,16 @@ import { DataTable } from '@/components/ui/DataTable';
 import { StatusBadgeAuto, EmptyState } from '@/components/ui/Status';
 import { Modal } from '@/components/ui/Modal';
 import { fmtINR, fmtDate, genId, fmtINRRecharts } from '@/lib/format';
-
-const monthlyData = [
-  { month: 'May', income: 180000, expense: 142000 },
-  { month: 'Jun', income: 215000, expense: 158000 },
-  { month: 'Jul', income: 285000, expense: 201000 },
-  { month: 'Aug', income: 175000, expense: 130000 },
-  { month: 'Sep', income: 295000, expense: 210000 },
-  { month: 'Oct', income: 460000, expense: 305000 },
-];
-
-const paymentSplit = [
-  { name: 'Advance', value: 187500, color: '#2b4787' },
-  { name: 'Installment', value: 52500, color: '#7e22ce' },
-  { name: 'Final', value: 220000, color: '#10b981' },
-  { name: 'Supplier', value: 158000, color: '#f59e0b' },
-];
+import { getMonthlyPaymentSummary } from '@/lib/dataSummaries';
 
 export function PaymentsFinance() {
   const { data, setData } = useData();
+  const monthlyData = getMonthlyPaymentSummary(data.payments);
+  const splitColors = ['#2b4787', '#7e22ce', '#10b981', '#f59e0b'];
+  const paymentSplit = Object.entries(data.payments.reduce((totals, payment) => {
+    if (payment.status === 'Paid') totals[payment.type] = (totals[payment.type] || 0) + payment.amount;
+    return totals;
+  }, {})).map(([name, value], index) => ({ name, value, color: splitColors[index % splitColors.length] }));
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ projectId: '', type: 'Advance', amount: 0, method: 'Bank Transfer', reference: '', date: '' });
 

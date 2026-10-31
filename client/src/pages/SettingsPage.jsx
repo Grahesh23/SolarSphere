@@ -10,7 +10,7 @@ export function SettingsPage() {
   const { resetData } = useData();
   const [tab, setTab] = useTabs('company');
   const [resetOpen, setResetOpen] = useState(false);
-  const [company, setCompany] = useState({ name: 'SolarSphere Solar Pvt Ltd', gst: '27ABCDE1234F1Z5', email: 'contact@solarsphere.io', phone: '+91 20 4000 8000', address: 'Pune, Maharashtra' });
+  const [company, setCompany] = useState({ name: '', gst: '', email: '', phone: '', address: '' });
   const [prefs, setPrefs] = useState({ currency: 'INR', taxRate: 8, theme: 'light', notifications: true, autoBackup: true });
 
   return (
@@ -125,9 +125,9 @@ export function SettingsPage() {
               </label>
             </div>
             <div className="p-4 rounded-lg border border-rose-200 bg-rose-50">
-              <div className="text-sm font-medium text-rose-700">Reset Demo Data</div>
-              <div className="text-xs text-rose-600 mt-1">Restore all data to the original demonstration seed. Any changes made during this session will be lost.</div>
-              <button className="btn-danger mt-3" onClick={() => setResetOpen(true)}><RotateCcw className="w-4 h-4" />Reset to Seed Data</button>
+              <div className="text-sm font-medium text-rose-700">Clear Local Data</div>
+              <div className="text-xs text-rose-600 mt-1">Permanently remove locally stored prototype records from this browser.</div>
+              <button className="btn-danger mt-3" onClick={() => setResetOpen(true)}><RotateCcw className="w-4 h-4" />Clear Local Data</button>
             </div>
           </div>
         </div>
@@ -135,9 +135,9 @@ export function SettingsPage() {
 
       <ConfirmDialog
         open={resetOpen}
-        title="Reset All Data?"
-        message="This will permanently discard all changes made in this session and restore the original demonstration dataset. This cannot be undone."
-        confirmLabel="Reset Data"
+        title="Clear Local Data?"
+        message="This will permanently remove locally stored prototype records from this browser. This cannot be undone."
+        confirmLabel="Clear Data"
         tone="danger"
         onConfirm={() => { resetData(); setResetOpen(false); }}
         onCancel={() => setResetOpen(false)}

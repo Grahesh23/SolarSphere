@@ -30,7 +30,7 @@ export function StatusBadge({ status, variant = 'slate', icon }) {
 }
 
 export function statusVariant(status) {
-  const s = status.toLowerCase();
+  const s = typeof status === 'string' ? status.toLowerCase() : '';
   if (['active', 'approved', 'completed', 'paid', 'accepted', 'won', 'delivered', 'disbursed', 'resolved', 'available'].some((k) => s.includes(k))) return 'emerald';
   if (['pending', 'scheduled', 'sent', 'partial', 'in progress', 'under review', 'applied', 'packing', 'packed'].some((k) => s.includes(k))) return 'amber';
   if (['rejected', 'overdue', 'expired', 'lost', 'failed', 'error', 'returned'].some((k) => s.includes(k))) return 'rose';
@@ -40,7 +40,7 @@ export function statusVariant(status) {
 }
 
 export function StatusBadgeAuto({ status }) {
-  return <StatusBadge status={status} variant={statusVariant(status)} />;
+  return <StatusBadge status={status ?? 'Unknown'} variant={statusVariant(status)} />;
 }
 
 export function EmptyState({ title, message, action }) {
@@ -69,4 +69,3 @@ export function AlertBanner({ type, message }) {
     </div>
   );
 }
-

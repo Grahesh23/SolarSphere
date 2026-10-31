@@ -14,6 +14,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
 import { StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
 import { fmtINR, fmtDate, fmtINRRecharts, genId } from '@/lib/format';
+import { getMonthlyPaymentSummary } from '@/lib/dataSummaries';
 
 export function FinancePortal() {
   const [active, setActive] = useState('dashboard');
@@ -40,17 +41,9 @@ function FinancePage({ active, onNavigate }) {
   }
 }
 
-const cashflowData = [
-  { month: 'May', income: 180000, expense: 142000 },
-  { month: 'Jun', income: 215000, expense: 158000 },
-  { month: 'Jul', income: 285000, expense: 201000 },
-  { month: 'Aug', income: 175000, expense: 130000 },
-  { month: 'Sep', income: 295000, expense: 210000 },
-  { month: 'Oct', income: 460000, expense: 305000 },
-];
-
 function FinanceDashboard({ onNavigate }) {
   const { data } = useData();
+  const cashflowData = getMonthlyPaymentSummary(data.payments);
   const revenue = data.payments.filter((p) => p.status === 'Paid' && p.type !== 'Supplier').reduce((s, p) => s + p.amount, 0);
   const expenses = data.payments.filter((p) => p.type === 'Supplier').reduce((s, p) => s + p.amount, 0);
   const profit = revenue - expenses;

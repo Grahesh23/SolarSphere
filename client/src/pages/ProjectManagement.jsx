@@ -183,7 +183,7 @@ export function ProjectManagement() {
                 </div>
               </div>
               <div><label className="label">Location</label><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="City, State" /></div>
-              <div><label className="label">Assigned Employees (comma separated)</label><input className="input" value={form.assignedEmployees} onChange={(e) => setForm({ ...form, assignedEmployees: e.target.value })} placeholder="e.g. Arjun Verma, Meera Nair" /></div>
+              <div><label className="label">Assigned Employees (comma separated)</label><input className="input" value={form.assignedEmployees} onChange={(e) => setForm({ ...form, assignedEmployees: e.target.value })} placeholder="Employee names" /></div>
             </div>
             <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2 bg-slate-50">
               <button className="btn-outline" onClick={() => setAddOpen(false)}>Cancel</button>

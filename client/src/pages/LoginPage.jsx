@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Sun, Mail, Lock, ArrowRight, ShieldCheck, AlertCircle, Eye, EyeOff, UserRound, Building2, Phone } from 'lucide-react';
-import { useAuth, DEMO_ACCOUNTS } from '@/data/AuthContext';
+import { Mail, Lock, ArrowRight, ShieldCheck, AlertCircle, Eye, EyeOff, UserRound, Building2, Phone } from 'lucide-react';
+import { useAuth } from '@/data/AuthContext';
+import { SolarHero } from '@/components/solar3d/SolarHero';
 
 export function LoginPage() {
   const { login, register } = useAuth();
@@ -54,24 +55,6 @@ export function LoginPage() {
     setLoading(false);
   };
 
-  const quickFill = (roleEmail) => {
-    setEmail(roleEmail);
-    setPassword('solarsphere123');
-    setError('');
-    setSuccess('');
-  };
-
-  const roleColors = {
-    Admin: 'bg-navy-50 text-navy-700 border-navy-200',
-    Sales: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    Surveyor: 'bg-grape-50 text-grape-700 border-grape-200',
-    Warehouse: 'bg-amber-50 text-amber-700 border-amber-200',
-    Technician: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    Service: 'bg-rose-50 text-rose-700 border-rose-200',
-    Finance: 'bg-navy-50 text-navy-700 border-navy-200',
-    Customer: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  };
-
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-100">
       <div className="lg:w-1/2 bg-navy-950 text-white p-8 lg:p-12 flex flex-col justify-between relative overflow-hidden">
@@ -92,6 +75,9 @@ export function LoginPage() {
           <p className="text-slate-300 text-base max-w-md leading-relaxed">
             One connected platform for sales, survey, warehouse, installation, service, finance, and customer experience — with intelligent roof analysis and predictive insights.
           </p>
+        </div>
+        <div className="relative my-5 h-[28vh] min-h-[220px] lg:my-0 lg:h-[clamp(280px,42vh,500px)]">
+          <SolarHero />
         </div>
         <div className="relative flex items-center gap-2 text-sm text-slate-400">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -124,14 +110,14 @@ export function LoginPage() {
                   <label className="label">Email Address</label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@solarsphere.demo" className="input pl-9" required />
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="input pl-9" required />
                   </div>
                 </div>
                 <div>
                   <label className="label">Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type={showPass ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="solarsphere123" className="input pl-9 pr-9" required />
+                    <input type={showPass ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="input pl-9 pr-9" required />
                     <button type="button" onClick={() => setShowPass((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-navy-700">
                       {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -162,26 +148,6 @@ export function LoginPage() {
                 </button>
               </form>
 
-              <div className="mt-8">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex-1 h-px bg-slate-200" />
-                  <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Demo Accounts · Click to fill</span>
-                  <div className="flex-1 h-px bg-slate-200" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {DEMO_ACCOUNTS.map((a) => (
-                    <button key={a.email} onClick={() => quickFill(a.email)} type="button"
-                      className={`text-left rounded-lg border px-3 py-2 text-xs transition hover:shadow-sm ${roleColors[a.role]}`}>
-                      <div className="font-semibold">{a.role}</div>
-                      <div className="opacity-70 truncate">{a.email}</div>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-                  <Sun className="w-3.5 h-3.5" />
-                  <span>Password for all demo accounts: <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-navy-700">solarsphere123</code></span>
-                </div>
-              </div>
             </>
           ) : (
             <>

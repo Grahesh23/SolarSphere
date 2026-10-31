@@ -8,40 +8,31 @@ import { useData } from '@/data/DataContext';
 import { PageContainer } from '@/components/layout/MobileSidebar';
 import { PageHeader } from '@/components/layout/Header';
 import { fmtINR, fmtNum, fmtINRRecharts } from '@/lib/format';
-
-const leadSourceData = [
-  { source: 'Website', value: 2, color: '#2b4787' },
-  { source: 'Referral', value: 2, color: '#7e22ce' },
-  { source: 'Advertisement', value: 1, color: '#10b981' },
-  { source: 'Exhibition', value: 1, color: '#f59e0b' },
-];
-
-const conversionFunnel = [
-  { stage: 'Enquiries', value: 6, fill: '#2b4787' },
-  { stage: 'Surveys', value: 4, fill: '#3a5fa3' },
-  { stage: 'Quotations', value: 3, fill: '#7e22ce' },
-  { stage: 'Won', value: 2, fill: '#10b981' },
-];
-
-const capacityData = [
-  { range: '1-2 kW', projects: 1 },
-  { range: '3 kW', projects: 1 },
-  { range: '4 kW', projects: 1 },
-  { range: '5 kW', projects: 2 },
-];
+import { getMonthlyPaymentSummary } from '@/lib/dataSummaries';
 
 export function AnalyticsReports() {
   const { data } = useData();
   const [range, setRange] = useState('6m');
 
-  const installTrend = [
-    { month: 'May', installs: 0, revenue: 180000 },
-    { month: 'Jun', installs: 1, revenue: 215000 },
-    { month: 'Jul', installs: 1, revenue: 285000 },
-    { month: 'Aug', installs: 0, revenue: 175000 },
-    { month: 'Sep', installs: 0, revenue: 295000 },
-    { month: 'Oct', installs: 1, revenue: 460000 },
+  const installTrend = getMonthlyPaymentSummary(data.payments, range === '3m' ? 3 : range === '1y' ? 12 : 6)
+    .map(({ month, income }) => ({ month, revenue: income }));
+  const sourceColors = ['#2b4787', '#7e22ce', '#10b981', '#f59e0b'];
+  const leadSourceData = Object.entries(data.customers.reduce((totals, customer) => {
+    const source = customer.enquirySource || 'Unspecified';
+    totals[source] = (totals[source] || 0) + 1;
+    return totals;
+  }, {})).map(([source, value], index) => ({ source, value, color: sourceColors[index % sourceColors.length] }));
+  const conversionFunnel = [
+    { stage: 'Enquiries', value: data.customers.length, fill: '#2b4787' },
+    { stage: 'Surveys', value: data.surveys.length, fill: '#3a5fa3' },
+    { stage: 'Quotations', value: data.quotations.length, fill: '#7e22ce' },
+    { stage: 'Won', value: data.customers.filter((customer) => customer.leadStatus === 'Won').length, fill: '#10b981' },
   ];
+  const capacityData = Object.entries(data.projects.reduce((totals, project) => {
+    const rangeLabel = `${project.capacity} kW`;
+    totals[rangeLabel] = (totals[rangeLabel] || 0) + 1;
+    return totals;
+  }, {})).map(([range, projects]) => ({ range, projects }));
 
   const technicianPerf = data.technicians.map((t) => ({
     name: t.name.split(' ')[0],
@@ -68,17 +59,17 @@ export function AnalyticsReports() {
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <div className="card p-4"><div className="flex items-center gap-2 text-xs text-slate-500"><Users className="w-3.5 h-3.5 text-navy-500" />Total Customers</div><div className="text-2xl font-display font-bold text-navy-800 mt-1">{data.customers.length}</div><div className="text-xs text-emerald-600 mt-0.5">+12% growth</div></div>
+        <div className="card p-4"><div className="flex items-center gap-2 text-xs text-slate-500"><Users className="w-3.5 h-3.5 text-navy-500" />Total Customers</div><div className="text-2xl font-display font-bold text-navy-800 mt-1">{data.customers.length}</div></div>
         <div className="card p-4"><div className="flex items-center gap-2 text-xs text-slate-500"><FolderKanban className="w-3.5 h-3.5 text-grape-500" />Projects Won</div><div className="text-2xl font-display font-bold text-grape-700 mt-1">{data.projects.filter((p) => p.status === 'Completed').length}</div><div className="text-xs text-slate-400 mt-0.5">of {data.projects.length} total</div></div>
-        <div className="card p-4"><div className="flex items-center gap-2 text-xs text-slate-500"><IndianRupee className="w-3.5 h-3.5 text-emerald-500" />Revenue</div><div className="text-2xl font-display font-bold text-emerald-600 mt-1">{fmtINR(data.payments.filter((p) => p.status === 'Paid' && p.type !== 'Supplier').reduce((s, p) => s + p.amount, 0))}</div><div className="text-xs text-emerald-600 mt-0.5">+22% YoY</div></div>
+        <div className="card p-4"><div className="flex items-center gap-2 text-xs text-slate-500"><IndianRupee className="w-3.5 h-3.5 text-emerald-500" />Revenue</div><div className="text-2xl font-display font-bold text-emerald-600 mt-1">{fmtINR(data.payments.filter((p) => p.status === 'Paid' && p.type !== 'Supplier').reduce((s, p) => s + p.amount, 0))}</div></div>
         <div className="card p-4"><div className="flex items-center gap-2 text-xs text-slate-500"><Sun className="w-3.5 h-3.5 text-amber-500" />Capacity Installed</div><div className="text-2xl font-display font-bold text-navy-800 mt-1">{data.projects.reduce((s, p) => s + p.capacity, 0)} kW</div><div className="text-xs text-slate-400 mt-0.5">{fmtNum(data.configs.reduce((s, c) => s + c.estimatedAnnual, 0))} kWh/yr</div></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
         {/* Revenue trend */}
         <div className="card p-5">
-          <h3 className="section-title mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-emerald-500" />Revenue & Install Trend</h3>
-          <p className="text-xs text-slate-500 mb-3">Monthly revenue (INR) and installations</p>
+          <h3 className="section-title mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-emerald-500" />Revenue Trend</h3>
+          <p className="text-xs text-slate-500 mb-3">Monthly recorded revenue (INR)</p>
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart data={installTrend} margin={{ left: 8, right: 8, top: 4 }}>
               <defs>
