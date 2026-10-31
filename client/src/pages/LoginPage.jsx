@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { Mail, Lock, ArrowRight, ShieldCheck, AlertCircle, Eye, EyeOff, UserRound, Building2, Phone } from 'lucide-react';
 import { useAuth } from '@/data/AuthContext';
 import { SolarHero } from '@/components/solar3d/SolarHero';
+import { normalizeRoleName } from '@/lib/bomRevision';
 
 export function LoginPage() {
   const { login, register } = useAuth();
   const [tab, setTab] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState('Survey Technician');
+  const [selectedRole, setSelectedRole] = useState('Surveyor');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -27,7 +28,7 @@ export function LoginPage() {
     setSuccess('');
     setLoading(true);
 
-    const normalizedRole = selectedRole === 'Survey Technician' ? 'SURVEY_TECHNICIAN' : selectedRole === 'Installation Technician' ? 'INSTALLATION_TECHNICIAN' : selectedRole;
+    const normalizedRole = normalizeRoleName(selectedRole);
     const res = await login(email, password, normalizedRole);
 
     if (!res.ok) {
@@ -118,7 +119,9 @@ export function LoginPage() {
                 <div>
                   <label className="label">Role</label>
                   <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} className="input">
+                    <option value="Surveyor">Surveyor</option>
                     <option value="Survey Technician">Survey Technician</option>
+                    <option value="Technician">Technician</option>
                     <option value="Installation Technician">Installation Technician</option>
                     <option value="Sales">Sales Executive</option>
                     <option value="Admin">Administrator</option>

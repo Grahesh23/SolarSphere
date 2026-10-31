@@ -65,6 +65,13 @@ export function QuotationsBOM() {
   const createQuote = async () => {
     if (!form.projectId) return;
     setActionError('');
+
+    const existingQuote = quotations.find((q) => q.projectId === form.projectId && q.bomApproved);
+    if (existingQuote) {
+      setActionError('An approved BOM already exists for this project. Create a revision instead of overwriting the approved version.');
+      return;
+    }
+
     try {
       await request(`/workflow/projects/${form.projectId}/quotations`, { method: 'POST', body: JSON.stringify({}) });
       await refresh();
@@ -75,7 +82,8 @@ export function QuotationsBOM() {
 
   const eligibleProjects = projects.filter((p) => {
     const s = surveys.find((s) => s.id === p.surveyId);
-    return s?.status === 'Approved' && !p.quotationId;
+    const existingApprovedQuote = quotations.find((q) => q.projectId === p.id && q.bomApproved);
+    return s?.status === 'Approved' && !p.quotationId && !existingApprovedQuote;
   });
 
   return (

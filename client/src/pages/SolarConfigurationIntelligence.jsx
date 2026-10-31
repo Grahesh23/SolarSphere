@@ -4,6 +4,7 @@ import {
   CheckCircle2, FileText, ListChecks, Loader2, GitCompare, Building2, TrendingUp,
 } from 'lucide-react';
 import { useData } from '@/data/DataContext';
+import { requiresRevisionForApprovedBom } from '@/lib/bomRevision';
 import { PageContainer } from '@/components/layout/MobileSidebar';
 import { PageHeader } from '@/components/layout/Header';
 import { StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
@@ -121,10 +122,22 @@ export function SolarConfigurationIntelligence() {
 
   const approve = () => {
     if (!rec || !selectedProjectId) return;
+
     const systemType = rec.gridType || getSystemType(input);
+    const previousApprovedConfig = data.configs.find((config) => config.projectId === selectedProjectId && config.status === 'Approved');
+    const nextBom = (rec.bom || buildBom(rec, systemType)).map((item) => ({ ...item, id: genId('bom') }));
+
+    if (previousApprovedConfig && requiresRevisionForApprovedBom({ bomApproved: true, items: previousApprovedConfig.bom || [] }, nextBom)) {
+      const revisionMessage = 'This project already has an approved BOM/configuration. A new revision must be created instead of overwriting the approved version.';
+      window.alert(revisionMessage);
+      return;
+    }
+
     const newConfig = {
       id: genId('cfg'),
       projectId: selectedProjectId,
+      previousConfigId: previousApprovedConfig?.id || null,
+      revision: previousApprovedConfig ? (previousApprovedConfig.revision || 1) + 1 : 1,
       recommendedCapacity: rec.capacity,
       gridType: systemType,
       systemType,
@@ -138,9 +151,9 @@ export function SolarConfigurationIntelligence() {
       estimatedAnnual: rec.estimatedAnnual,
       paybackYears: rec.paybackYears,
       savingsMonthly: rec.savingsMonthly,
-      bom: (rec.bom || buildBom(rec, systemType)).map((item) => ({ ...item, id: genId('bom') })),
+      bom: nextBom,
       reasoning: rec.reasoning,
-      status: 'Approved',
+      status: previousApprovedConfig ? 'Revision Approved' : 'Approved',
       createdAt: new Date().toISOString().slice(0, 10),
     };
     setData((p) => ({ ...p, configs: [...p.configs, newConfig], projects: p.projects.map((pr) => pr.id === selectedProjectId ? { ...pr, configId: newConfig.id, totalCost: rec.estimatedCost, gridType: systemType, capacity: Number(input.capacity) || Number(rec.capacity) } : pr) }));
@@ -295,7 +308,7 @@ export function SolarConfigurationIntelligence() {
       <ConfirmDialog
         open={approveOpen}
         title="Approve Configuration?"
-        message="The approved configuration will be attached to the selected project and used for quotation and BOM generation."
+        message="The configuration will be attached to the selected project. If a prior approved BOM already exists, a new revision is created instead of overwriting it."
         confirmLabel="Approve"
         onConfirm={approve}
         onCancel={() => setApproveOpen(false)}
