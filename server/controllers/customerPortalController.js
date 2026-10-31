@@ -26,6 +26,7 @@ const ensureCustomerProfile = async (user) => {
     });
   }
 
+  const isNewCustomer = customer.isNew;
   customer.userId = user._id;
   customer.name = user.name;
   customer.email = user.email;
@@ -35,7 +36,21 @@ const ensureCustomerProfile = async (user) => {
 
   if (!user.customerId || user.customerId.toString() !== customer._id.toString()) {
     user.customerId = customer._id;
-    await user.save();
+    try {
+      await user.save();
+    } catch (error) {
+      try {
+        if (isNewCustomer) {
+          await customer.deleteOne();
+        } else {
+          customer.userId = undefined;
+          await customer.save();
+        }
+      } catch (cleanupError) {
+        console.error('Failed to roll back customer profile linking:', cleanupError);
+      }
+      throw error;
+    }
   }
 
   return customer;
@@ -94,7 +109,7 @@ export const getCustomerPortal = async (req, res, next) => {
 
     const customer = await ensureCustomerProfile(req.user);
     const projects = await findCustomerRecords('projects', customer._id);
-    const projectIds = projects.map((project) => new mongoose.Types.ObjectId(project.id));
+    const projectIds = projects.map((project) => project.id);
 
     const configIds = projects.map((project) => project.configId).filter(Boolean);
     const equipment = await findCustomerRecords('equipmentunits', customer._id, projectIds);

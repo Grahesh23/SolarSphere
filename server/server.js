@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
 import User from './models/user-management/User.js';
 import authRoutes from './routes/authRoutes.js';
+import adminUserRoutes from './routes/adminUserRoutes.js';
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminUserRoutes);
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
