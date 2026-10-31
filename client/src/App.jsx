@@ -17,9 +17,11 @@ function PortalRouter() {
   switch (user.role) {
     case 'Admin': return <AdminPortal />;
     case 'Sales': return <SalesPortal />;
-    case 'Surveyor': return <SurveyorPortal />;
+    case 'Surveyor':
+    case 'SURVEY_TECHNICIAN': return <SurveyorPortal />;
     case 'Warehouse': return <WarehousePortal />;
-    case 'Technician': return <TechnicianPortal />;
+    case 'Technician':
+    case 'INSTALLATION_TECHNICIAN': return <TechnicianPortal />;
     case 'Service': return <ServicePortal />;
     case 'Finance': return <FinancePortal />;
     case 'Customer':

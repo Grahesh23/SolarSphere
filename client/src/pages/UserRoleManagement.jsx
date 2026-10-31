@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { AUTH_TOKEN_KEY, API_BASE } from '@/data/AuthContext';
 import { fmtDate } from '@/lib/format';
 
-const EMPLOYEE_ROLES = ['Sales', 'Surveyor', 'Warehouse', 'Technician', 'Service', 'Finance'];
+const EMPLOYEE_ROLES = ['Sales', 'Surveyor', 'SURVEY_TECHNICIAN', 'Warehouse', 'Technician', 'INSTALLATION_TECHNICIAN', 'Service', 'Finance'];
 const EMPTY_FORM = {
   name: '',
   email: '',

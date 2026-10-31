@@ -8,6 +8,7 @@ export function LoginPage() {
   const [tab, setTab] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedRole, setSelectedRole] = useState('Survey Technician');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -26,7 +27,8 @@ export function LoginPage() {
     setSuccess('');
     setLoading(true);
 
-    const res = await login(email, password);
+    const normalizedRole = selectedRole === 'Survey Technician' ? 'SURVEY_TECHNICIAN' : selectedRole === 'Installation Technician' ? 'INSTALLATION_TECHNICIAN' : selectedRole;
+    const res = await login(email, password, normalizedRole);
 
     if (!res.ok) {
       setError(res.error || 'Login failed.');
@@ -113,6 +115,19 @@ export function LoginPage() {
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="input pl-9" required />
                   </div>
                 </div>
+                <div>
+                  <label className="label">Role</label>
+                  <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} className="input">
+                    <option value="Survey Technician">Survey Technician</option>
+                    <option value="Installation Technician">Installation Technician</option>
+                    <option value="Sales">Sales Executive</option>
+                    <option value="Admin">Administrator</option>
+                    <option value="Finance">Finance</option>
+                    <option value="Warehouse">Warehouse</option>
+                    <option value="Service">Service</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="label">Password</label>
                   <div className="relative">

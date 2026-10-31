@@ -42,14 +42,25 @@ function SurveyorPage({ active, onNavigate }) {
 function useMySurveys() {
   const { surveys, projects, customers, loading, error, request, refresh } = useWorkflow();
   const { user } = useAuth();
-  const mySurveys = useMemo(() => surveys.filter((survey) => {
-    const assignedTo = survey.assignedTo?.trim().toLowerCase();
-    const matchesUser = [user?.name, user?.email, user?.id]
-      .filter(Boolean)
-      .some((value) => assignedTo === value.toLowerCase());
-    const matchesUserId = survey.technicianId && String(survey.technicianId) === String(user?.id);
-    return matchesUser || matchesUserId || (!assignedTo && !survey.technicianId);
-  }), [surveys, user]);
+  const mySurveys = useMemo(() => {
+    const surveyTechRoles = ['Surveyor', 'SURVEY_TECHNICIAN'];
+    const userName = user?.name?.trim().toLowerCase();
+    const userEmail = user?.email?.trim().toLowerCase();
+    const userId = String(user?.id || '');
+
+    if (!surveyTechRoles.includes(user?.role)) return [];
+
+    return surveys.filter((survey) => {
+      const assignedTo = survey.assignedTo?.trim().toLowerCase();
+      const assignedId = survey.technicianId ? String(survey.technicianId) : '';
+      const matchesUser = Boolean(
+        assignedTo &&
+        (assignedTo === userName || assignedTo === userEmail || assignedTo === userId.toLowerCase())
+      );
+      const matchesUserId = assignedId && assignedId === userId;
+      return matchesUser || matchesUserId;
+    });
+  }, [surveys, user]);
   return { surveys: mySurveys, projects, customers, loading, error, request, refresh };
 }
 

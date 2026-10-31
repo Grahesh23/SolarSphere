@@ -8,10 +8,20 @@ import Quotation from '../models/project-management/Quotation.js';
 import ApiError from '../utils/apiError.js';
 import { sendSuccess } from '../utils/apiResponse.js';
 
-const staffRoles = ['Admin', 'Sales', 'Surveyor'];
+const staffRoles = ['Admin', 'Sales', 'Surveyor', 'SURVEY_TECHNICIAN'];
+
+export const normalizeTechnicianRole = (role) => {
+  if (!role) return role;
+  if (role === 'Surveyor' || role === 'SURVEY_TECHNICIAN') return 'SURVEY_TECHNICIAN';
+  if (role === 'Technician' || role === 'INSTALLATION_TECHNICIAN') return 'INSTALLATION_TECHNICIAN';
+  return role;
+};
+
+export const isSurveyTechnicianRole = (role) => ['Surveyor', 'SURVEY_TECHNICIAN'].includes(role);
+export const isInstallationTechnicianRole = (role) => ['Technician', 'INSTALLATION_TECHNICIAN'].includes(role);
 
 const requireStaff = (req, res, next) => {
-  if (!staffRoles.includes(req.user.role)) {
+  if (!staffRoles.includes(req.user.role) && !isSurveyTechnicianRole(req.user.role)) {
     return next(new ApiError(403, 'You do not have permission to manage this workflow.'));
   }
   next();
@@ -205,14 +215,17 @@ export const getSurveyors = [
   requireStaff,
   async (req, res, next) => {
     try {
-      const surveyors = await User.find({ role: 'Surveyor', isActive: true }).sort({ name: 1 }).select('name email phone role');
+      const surveyors = await User.find({
+        isActive: true,
+        role: { $in: ['Surveyor', 'SURVEY_TECHNICIAN'] },
+      }).sort({ name: 1 }).select('name email phone role');
       return sendSuccess(res, 200, {
         surveyors: surveyors.map((user) => ({
           id: String(user._id),
           name: user.name,
           email: user.email,
           phone: user.phone || '',
-          role: user.role,
+          role: normalizeTechnicianRole(user.role),
         })),
       });
     } catch (error) {
@@ -282,8 +295,8 @@ export const assignSurvey = [
       }
 
       const technician = await User.findById(technicianId);
-      if (!technician || technician.role !== 'Surveyor') {
-        return next(new ApiError(400, 'Selected technician must be a registered surveyor.'));
+      if (!technician || !isSurveyTechnicianRole(technician.role)) {
+        return next(new ApiError(400, 'Selected technician must be a registered survey technician.'));
       }
 
       const project = await Project.findById(req.params.projectId);
@@ -348,10 +361,11 @@ export const submitSurvey = [
       if (req.user.role === 'Sales') {
         return next(new ApiError(403, 'Sales staff cannot submit field survey measurements.'));
       }
-      if (req.user.role === 'Surveyor' && survey.technicianId && String(survey.technicianId) !== String(req.user._id)) {
+      const userIsSurveyTech = isSurveyTechnicianRole(req.user.role);
+      if (userIsSurveyTech && survey.technicianId && String(survey.technicianId) !== String(req.user._id)) {
         return next(new ApiError(403, 'Only the assigned survey technician can submit this survey.'));
       }
-      if (req.user.role !== 'Admin' && req.user.role !== 'Surveyor' && survey.technicianId && String(survey.technicianId) !== String(req.user._id)) {
+      if (!['Admin', 'Surveyor', 'SURVEY_TECHNICIAN'].includes(req.user.role) && survey.technicianId && String(survey.technicianId) !== String(req.user._id)) {
         return next(new ApiError(403, 'Only the assigned survey technician can submit this survey.'));
       }
 
@@ -392,9 +406,10 @@ export const reviewSurvey = [
       const survey = await RoofSurvey.findById(req.params.surveyId);
       if (!survey) return next(new ApiError(404, 'Survey not found.'));
       if (req.user.role === 'Sales') return next(new ApiError(403, 'Sales staff cannot approve technical survey feasibility.'));
-      if (req.user.role !== 'Surveyor' && req.user.role !== 'Admin') return next(new ApiError(403, 'Only the surveyor team can review technical surveys.'));
+      const userIsSurveyTech = isSurveyTechnicianRole(req.user.role);
+      if (!['Admin', 'Surveyor', 'SURVEY_TECHNICIAN'].includes(req.user.role)) return next(new ApiError(403, 'Only the surveyor team can review technical surveys.'));
       if (survey.status !== 'Submitted') return next(new ApiError(409, 'Only submitted surveys can be reviewed.'));
-      if (req.user.role === 'Surveyor' && survey.technicianId && String(survey.technicianId) === String(req.user._id)) {
+      if (userIsSurveyTech && survey.technicianId && String(survey.technicianId) === String(req.user._id)) {
         return next(new ApiError(403, 'Survey technicians cannot approve their own survey.'));
       }
 

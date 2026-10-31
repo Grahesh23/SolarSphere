@@ -43,12 +43,15 @@ function useMyInstallations() {
   const { data } = useData();
   const { user } = useAuth();
   return useMemo(() => {
-    const byId = data.installations.filter((i) => i.technicianId === user?.technicianId);
+    const installationTechRoles = ['Technician', 'INSTALLATION_TECHNICIAN'];
+    if (!installationTechRoles.includes(user?.role)) return [];
+
+    const byId = data.installations.filter((i) => i.technicianId === user?.technicianId || i.technicianId === user?.id);
     const byName = data.installations.filter((i) => {
       const tech = data.technicians.find((t) => t.id === i.technicianId);
       return tech?.name === user?.name;
     });
-    return byId.length > 0 ? byId : byName.length > 0 ? byName : data.installations;
+    return byId.length > 0 ? byId : byName.length > 0 ? byName : [];
   }, [data.installations, data.technicians, user]);
 }
 

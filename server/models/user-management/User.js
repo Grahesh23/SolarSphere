@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['Admin', 'Client', 'Customer', 'Sales', 'Surveyor', 'Warehouse', 'Technician', 'Service', 'Finance'],
+      enum: ['Admin', 'Client', 'Customer', 'Sales', 'Surveyor', 'SURVEY_TECHNICIAN', 'Warehouse', 'Technician', 'INSTALLATION_TECHNICIAN', 'Service', 'Finance'],
       default: 'Client',
     },
     phone: {
@@ -48,6 +48,12 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+userSchema.pre('validate', function normalizeRole(next) {
+  if (this.role === 'Surveyor') this.role = 'SURVEY_TECHNICIAN';
+  if (this.role === 'Technician') this.role = 'INSTALLATION_TECHNICIAN';
+  next();
+});
 
 userSchema.pre('save', async function hashPassword(next) {
   if (!this.isModified('password')) return next();

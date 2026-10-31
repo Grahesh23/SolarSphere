@@ -34,12 +34,12 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (email, password, role = '') => {
     try {
       const response = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, role }),
       });
 
       const payload = await response.json();
@@ -97,9 +97,11 @@ export function roleRoute(role) {
   switch (role) {
     case 'Admin': return 'admin';
     case 'Sales': return 'sales';
-    case 'Surveyor': return 'survey';
+    case 'Surveyor':
+    case 'SURVEY_TECHNICIAN': return 'survey';
     case 'Warehouse': return 'warehouse';
-    case 'Technician': return 'technician';
+    case 'Technician':
+    case 'INSTALLATION_TECHNICIAN': return 'technician';
     case 'Service': return 'service';
     case 'Finance': return 'finance';
     case 'Customer':

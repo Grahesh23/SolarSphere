@@ -3,7 +3,7 @@ import { API_BASE, AUTH_TOKEN_KEY, useAuth } from '@/data/AuthContext';
 
 const WorkflowContext = createContext(null);
 const EMPTY_WORKFLOW = { customers: [], projects: [], surveys: [], quotations: [] };
-const STAFF_ROLES = ['Admin', 'Sales', 'Surveyor'];
+const STAFF_ROLES = ['Admin', 'Sales', 'Surveyor', 'SURVEY_TECHNICIAN'];
 
 export function WorkflowProvider({ children }) {
   const { user } = useAuth();

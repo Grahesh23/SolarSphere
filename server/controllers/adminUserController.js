@@ -4,7 +4,7 @@ import User from '../models/user-management/User.js';
 import ApiError from '../utils/apiError.js';
 import { sendSuccess } from '../utils/apiResponse.js';
 
-const EMPLOYEE_ROLES = ['Sales', 'Surveyor', 'Warehouse', 'Technician', 'Service', 'Finance'];
+const EMPLOYEE_ROLES = ['Sales', 'Surveyor', 'SURVEY_TECHNICIAN', 'Warehouse', 'Technician', 'INSTALLATION_TECHNICIAN', 'Service', 'Finance'];
 
 const employeeResponse = (employee) => ({
   id: employee._id,

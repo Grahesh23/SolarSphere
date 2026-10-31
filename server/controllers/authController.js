@@ -4,6 +4,29 @@ import { generateToken } from '../utils/generateToken.js';
 import { sendSuccess } from '../utils/apiResponse.js';
 import { ensureCustomerProfile } from './customerPortalController.js';
 
+export const roleMatchesRequestedRole = (accountRole, requestedRole) => {
+  if (!requestedRole) return true;
+  const normalizedAccountRole = String(accountRole || '').trim();
+  const normalizedRequestedRole = String(requestedRole || '').trim();
+
+  const roleAliases = {
+    Surveyor: ['Surveyor', 'SURVEY_TECHNICIAN'],
+    'SURVEY_TECHNICIAN': ['Surveyor', 'SURVEY_TECHNICIAN'],
+    Technician: ['Technician', 'INSTALLATION_TECHNICIAN'],
+    'INSTALLATION_TECHNICIAN': ['Technician', 'INSTALLATION_TECHNICIAN'],
+    Admin: ['Admin'],
+    Sales: ['Sales'],
+    Warehouse: ['Warehouse'],
+    Service: ['Service'],
+    Finance: ['Finance'],
+    Client: ['Client', 'Customer'],
+    Customer: ['Client', 'Customer'],
+  };
+
+  const allowedRoles = roleAliases[normalizedRequestedRole] || [normalizedRequestedRole];
+  return allowedRoles.includes(normalizedAccountRole);
+};
+
 const safeUser = (user) => ({
   id: user._id,
   name: user.name,
@@ -69,7 +92,7 @@ export const registerUser = async (req, res, next) => {
 
 export const loginUser = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     if (!email || !password) {
       return next(new ApiError(400, 'Email and password are required.'));
@@ -85,6 +108,10 @@ export const loginUser = async (req, res, next) => {
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return next(new ApiError(401, 'Incorrect password.'));
+    }
+
+    if (role && !roleMatchesRequestedRole(user.role, role)) {
+      return next(new ApiError(403, `This account is registered as ${user.role}, not ${role}.`));
     }
 
     const token = generateToken(user);
