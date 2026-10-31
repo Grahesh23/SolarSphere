@@ -63,7 +63,7 @@ export const registerUser = async (req, res, next) => {
       password,
       phone: phone || '',
       companyName: companyName || '',
-      role: 'Client',
+      role: 'Customer',
     });
 
     try {

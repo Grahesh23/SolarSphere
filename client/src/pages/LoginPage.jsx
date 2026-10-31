@@ -9,7 +9,7 @@ export function LoginPage() {
   const [tab, setTab] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState('Surveyor');
+  const [selectedRole, setSelectedRole] = useState('Customer');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -119,9 +119,9 @@ export function LoginPage() {
                 <div>
                   <label className="label">Role</label>
                   <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} className="input">
+                    <option value="Customer">Customer</option>
                     <option value="Surveyor">Surveyor</option>
                     <option value="Survey Technician">Survey Technician</option>
-                    <option value="Technician">Technician</option>
                     <option value="Installation Technician">Installation Technician</option>
                     <option value="Sales">Sales Executive</option>
                     <option value="Admin">Administrator</option>

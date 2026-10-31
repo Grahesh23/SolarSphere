@@ -1,9 +1,8 @@
 import { useState, useMemo } from 'react';
 import {
-  ClipboardList, Calendar, MapPin, Image, Satellite, FileText, CheckCircle2,
-  Clock, Plus, Save, AlertCircle, Upload,
+  ClipboardList, Calendar, MapPin, FileText, CheckCircle2,
+  Clock, Save, AlertCircle,
 } from 'lucide-react';
-import { useData } from '@/data/DataContext';
 import { useAuth } from '@/data/AuthContext';
 import { useWorkflow } from '@/data/WorkflowContext';
 import { PortalLayout, PageContainer, PageHeader } from '@/components/layout/PortalLayout';
@@ -13,7 +12,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
 import { StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
 import { fmtDate, fmtINR, fmtNum } from '@/lib/format';
-import { RoofIntelligence } from '@/pages/RoofIntelligence';
+import { getVisibleSurveysForSurveyor } from '@/lib/surveyAccess';
 
 export function SurveyorPortal() {
   const [active, setActive] = useState('dashboard');
@@ -30,8 +29,6 @@ function SurveyorPage({ active, onNavigate }) {
     case 'assigned': return <AssignedSurveysPage />;
     case 'calendar': return <CalendarPage />;
     case 'measurements': return <MeasurementsPage />;
-    case 'upload': return <UploadPage />;
-    case 'roof-intelligence': return <RoofIntelligence />;
     case 'solar-configuration': return <SolarConfigurationIntelligence />;
     case 'reports': return <ReportsPage />;
     case 'completed': return <CompletedPage />;
@@ -44,22 +41,9 @@ function useMySurveys() {
   const { user } = useAuth();
   const mySurveys = useMemo(() => {
     const surveyTechRoles = ['Surveyor', 'SURVEY_TECHNICIAN'];
-    const userName = user?.name?.trim().toLowerCase();
-    const userEmail = user?.email?.trim().toLowerCase();
-    const userId = String(user?.id || '');
-
     if (!surveyTechRoles.includes(user?.role)) return [];
 
-    return surveys.filter((survey) => {
-      const assignedTo = survey.assignedTo?.trim().toLowerCase();
-      const assignedId = survey.technicianId ? String(survey.technicianId) : '';
-      const matchesUser = Boolean(
-        assignedTo &&
-        (assignedTo === userName || assignedTo === userEmail || assignedTo === userId.toLowerCase())
-      );
-      const matchesUserId = assignedId && assignedId === userId;
-      return matchesUser || matchesUserId;
-    });
+    return getVisibleSurveysForSurveyor({ surveys, user });
   }, [surveys, user]);
   return { surveys: mySurveys, projects, customers, loading, error, request, refresh };
 }
@@ -263,50 +247,6 @@ function MeasurementsPage() {
           <div><label className="label">Shading</label><select className="input" value={form.shading} onChange={(e) => setForm({ ...form, shading: e.target.value })}><option>None</option><option>Low</option><option>Moderate</option><option>High</option></select></div>
           <div><label className="label">Obstacles (comma separated)</label><input className="input" value={form.obstacles} onChange={(e) => setForm({ ...form, obstacles: e.target.value })} /></div>
           <div className="col-span-2"><label className="label">Remarks</label><textarea className="input" rows={2} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} /></div>
-        </div>
-      </Modal>
-    </PageContainer>
-  );
-}
-
-function UploadPage() {
-  const { surveys: mySurveys, projects } = useMySurveys();
-  const { data, setData } = useData();
-  const [selected, setSelected] = useState(null);
-
-  const addPhoto = (s, url) => {
-    setData((p) => ({ ...p, surveys: p.surveys.map((sv) => sv.id === s.id ? { ...sv, photos: [...sv.photos, url] } : sv) }));
-    setSelected(null);
-  };
-
-  return (
-    <PageContainer>
-      <PageHeader title="Roof Image Upload" description="Upload rooftop photographs for assigned surveys." />
-      <div className="space-y-3">
-        {mySurveys.filter((s) => s.status !== 'Approved').map((s) => {
-          const project = projects.find((p) => p.id === s.projectId);
-          return (
-            <div key={s.id} className="card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-medium text-navy-800">{project?.code || 'Project'}</div>
-                <span className="text-xs text-slate-500">{(s.photos || []).length} photo(s)</span>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {(s.photos || []).map((ph, i) => (
-                  <div key={i} className="w-20 h-20 rounded-lg bg-slate-200 flex items-center justify-center text-xs text-slate-500">{ph}</div>
-                ))}
-                <button className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:border-emerald-500 hover:text-emerald-600" onClick={() => setSelected(s)}><Plus className="w-5 h-5" /></button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <Modal open={!!selected} onClose={() => setSelected(null)} title="Add Roof Photo" description="Upload a rooftop photograph."
-        footer={<><button className="btn-outline" onClick={() => setSelected(null)}>Cancel</button><button className="btn-primary" onClick={() => selected && addPhoto(selected, `photo-${selected.photos.length + 1}.jpg`)}><Upload className="w-4 h-4" />Upload</button></>}>
-        <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center">
-          <Upload className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-          <p className="text-sm text-slate-500">Click upload to add a photo placeholder.</p>
-          <p className="text-xs text-slate-400 mt-1">In production, this connects to a file storage service.</p>
         </div>
       </Modal>
     </PageContainer>

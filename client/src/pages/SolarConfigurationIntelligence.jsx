@@ -162,6 +162,9 @@ export function SolarConfigurationIntelligence() {
 
   return (
     <PageContainer>
+      <div className="mb-4">
+        <AlertBanner type="info" message="Surveyor handoff: complete the roof configuration intelligence here, then pass the approved recommendation to the administrator for predictive analysis and final review." />
+      </div>
       <PageHeader
         title="Solar Configuration Intelligence"
         description="Recommend optimal solar configurations from customer inputs. Compare alternatives, approve, and generate quotations."

@@ -8,6 +8,7 @@ import { StatusBadgeAuto, AlertBanner, EmptyState } from '@/components/ui/Status
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { fmtINR, fmtDate } from '@/lib/format';
+import { isProjectEligibleForQuotation } from '@/lib/quotationEligibility';
 import { useWorkflow } from '@/data/WorkflowContext';
 import { useAuth } from '@/data/AuthContext';
 
@@ -81,9 +82,8 @@ export function QuotationsBOM() {
   };
 
   const eligibleProjects = projects.filter((p) => {
-    const s = surveys.find((s) => s.id === p.surveyId);
-    const existingApprovedQuote = quotations.find((q) => q.projectId === p.id && q.bomApproved);
-    return s?.status === 'Approved' && !p.quotationId && !existingApprovedQuote;
+    const s = surveys.find((survey) => survey.id === p.surveyId);
+    return isProjectEligibleForQuotation({ project: p, survey: s, quotations });
   });
 
   return (
@@ -97,7 +97,7 @@ export function QuotationsBOM() {
       {(error || actionError) && <div className="card p-3 mb-4 text-sm text-rose-700 bg-rose-50">{actionError || error}</div>}
       {eligibleProjects.length === 0 && (
         <div className="mb-4">
-          <AlertBanner type="info" message="No projects are ready for quotation. A survey must be approved and a configuration must exist before a quotation can be generated." />
+          <AlertBanner type="info" message="No projects are ready for quotation. A survey must be submitted or approved before the BOM can be generated." />
         </div>
       )}
 
@@ -136,8 +136,8 @@ export function QuotationsBOM() {
               </div>
             </div>
 
-            {survey && survey.status !== 'Approved' && (
-              <AlertBanner type="error" message="Survey is not approved — this quotation should not have been generated." />
+            {survey && !['Submitted', 'Approved'].includes(survey.status) && (
+              <AlertBanner type="warning" message="This project is waiting for a submitted or approved survey before quotation work can continue." />
             )}
 
             {!activeQuote.bomApproved && (
@@ -216,7 +216,7 @@ export function QuotationsBOM() {
         </Modal>
       )}
 
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Generate Quotation" description="Only projects with an approved survey and no existing quotation are eligible."
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Generate Quotation" description="Only projects with a submitted or approved survey and no existing approved quotation are eligible."
         footer={<><button className="btn-outline" onClick={() => setAddOpen(false)}>Cancel</button><button className="btn-primary" onClick={createQuote}>Generate</button></>}
       >
         <div>

@@ -204,9 +204,6 @@ export const submitCustomerEnquiry = async (req, res, next) => {
     }
 
     const customer = await ensureCustomerProfile(req.user);
-    if (customer.enquirySource !== 'Client registration') {
-      return next(new ApiError(409, 'An enquiry is already on file for your account.'));
-    }
 
     customer.phone = phone.trim();
     customer.address = address?.trim() || '';

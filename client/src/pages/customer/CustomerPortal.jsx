@@ -170,7 +170,21 @@ function CustDashboard({ onNavigate }) {
   const [enquirySaving, setEnquirySaving] = useState(false);
   const [enquiryError, setEnquiryError] = useState('');
   const [enquirySuccess, setEnquirySuccess] = useState('');
-  const hasSubmittedEnquiry = Boolean(d.customer && d.customer.enquirySource !== 'Client registration');
+  const hasCustomerProfile = Boolean(d.customer);
+  const hasSubmittedEnquiry = Boolean(
+    d.customer && (
+      (d.customer.enquirySource && d.customer.enquirySource !== 'Client registration') ||
+      d.customer.code ||
+      d.customer.city ||
+      d.customer.address ||
+      d.customer.phone ||
+      d.customer.desiredCapacity ||
+      d.projects.length > 0 ||
+      d.quotations.length > 0 ||
+      d.surveys.length > 0
+    )
+  );
+  const showEnquirySummary = hasCustomerProfile || hasSubmittedEnquiry;
   const project = d.projects[0];
   const config = d.projects[0] ? d.configs.find((item) => item.id === d.projects[0].configId) : null;
   const pendingPay = d.payments.filter((p) => p.status === 'Pending' || p.status === 'Overdue').reduce((s, p) => s + p.amount, 0);
@@ -205,11 +219,11 @@ function CustDashboard({ onNavigate }) {
       <PageHeader
         title={`Welcome, ${user?.name?.split(' ')[0]}`}
         description="Your solar installation journey at a glance."
-        actions={!hasSubmittedEnquiry && <button className="btn-primary" onClick={() => { setEnquiryError(''); setEnquiryOpen(true); }}><Plus className="w-4 h-4" />Make an Enquiry</button>}
+        actions={<button className="btn-primary" onClick={() => { setEnquiryError(''); setEnquiryOpen(true); }}><Plus className="w-4 h-4" />Make an Enquiry</button>}
       />
       {enquirySuccess && <div className="card p-3 mb-4 bg-emerald-50 text-sm text-emerald-700">{enquirySuccess}</div>}
       {enquiryError && <div className="card p-3 mb-4 bg-rose-50 text-sm text-rose-700">{enquiryError}</div>}
-      {hasSubmittedEnquiry && d.customer && (
+      {showEnquirySummary && d.customer && (
         <div className="card p-5 mb-5 border-navy-100">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-start gap-3">
@@ -220,7 +234,7 @@ function CustDashboard({ onNavigate }) {
                 <h2 className="font-display font-bold text-navy-900">Your enquiry</h2>
                 <p className="text-sm text-slate-500 mt-1">
                   {d.customer.code ? `Reference ${d.customer.code}` : 'Your customer profile is registered.'}
-                  {d.customer.city ? ` Â· ${d.customer.city}` : ''}
+                  {d.customer.city ? ` · ${d.customer.city}` : ''}
                 </p>
               </div>
             </div>
