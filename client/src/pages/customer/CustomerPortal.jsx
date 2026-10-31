@@ -4,7 +4,6 @@ import {
   ShieldCheck, Headphones, Bell, User, Sun, Zap, Clock, CheckCircle2, TrendingUp,
   Plus, Download, XCircle, AlertCircle, ChevronRight, MapPin,
 } from 'lucide-react';
-import { useData } from '@/data/DataContext';
 import { useAuth, AUTH_TOKEN_KEY, API_BASE } from '@/data/AuthContext';
 import { PortalLayout, PageContainer, PageHeader } from '@/components/layout/PortalLayout';
 import { KpiCard } from '@/components/ui/KpiCard';
