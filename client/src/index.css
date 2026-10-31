@@ -28,13 +28,15 @@
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-navy-800 text-white hover:bg-navy-700 focus:ring-navy-400;
+    @apply btn bg-[#1d2e4d] text-white hover:bg-[#1a2742] focus:ring-[#a89ef6];
+    box-shadow: 0 0 0 1px rgba(168, 158, 246, 0.12), 0 10px 20px rgba(29, 46, 77, 0.14);
   }
   .btn-emerald {
     @apply btn bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-400;
   }
   .btn-grape {
-    @apply btn bg-grape-600 text-white hover:bg-grape-700 focus:ring-grape-400;
+    @apply btn bg-[linear-gradient(135deg,#2d3d5f_0%,#3b4d7a_38%,#9c8ef3_100%)] text-white hover:brightness-105 focus:ring-[#b9b0ff];
+    box-shadow: 0 0 0 1px rgba(186, 176, 255, 0.18), 0 10px 22px rgba(45, 61, 95, 0.18);
   }
   .btn-outline {
     @apply btn bg-white border border-slate-300 text-navy-700 hover:bg-slate-50 focus:ring-navy-300;
