@@ -68,7 +68,7 @@ export function PortalLayout({ active, onNavigate, children, notifications: noti
                   return (
                     <button key={item.key} onClick={() => onNavigate(item.key)} title={collapsed ? item.label : undefined}
                       className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group',
-                        isActive ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-navy-800 hover:text-white',
+                        isActive ? 'bg-[linear-gradient(135deg,#1e2d47_0%,#2c3f65_36%,#a49ae9_100%)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14),0_10px_18px_rgba(30,45,71,0.2)]' : 'text-slate-300 hover:bg-navy-800 hover:text-white',
                         collapsed && 'justify-center')}>
                       <Icon className="w-4.5 h-4.5 shrink-0" style={{ width: 18, height: 18 }} />
                       {!collapsed && <span className="truncate">{item.label}</span>}
@@ -109,7 +109,7 @@ export function PortalLayout({ active, onNavigate, children, notifications: noti
                       return (
                         <button key={item.key} onClick={() => { onNavigate(item.key); setMobileOpen(false); }}
                           className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition',
-                            isActive ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-navy-800')}>
+                            isActive ? 'bg-[linear-gradient(135deg,#1e2d47_0%,#2c3f65_36%,#a49ae9_100%)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]' : 'text-slate-300 hover:bg-navy-800')}>
                           <Icon className="w-4.5 h-4.5 shrink-0" style={{ width: 18, height: 18 }} />
                           <span className="truncate">{item.label}</span>
                         </button>
