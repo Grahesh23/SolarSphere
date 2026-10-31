@@ -7,6 +7,7 @@ import { useData } from '@/data/DataContext';
 import { useAuth } from '@/data/AuthContext';
 import { useWorkflow } from '@/data/WorkflowContext';
 import { PortalLayout, PageContainer, PageHeader } from '@/components/layout/PortalLayout';
+import { SolarConfigurationIntelligence } from '@/pages/SolarConfigurationIntelligence';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
@@ -31,6 +32,7 @@ function SurveyorPage({ active, onNavigate }) {
     case 'measurements': return <MeasurementsPage />;
     case 'upload': return <UploadPage />;
     case 'roof-intelligence': return <RoofIntelligence />;
+    case 'solar-configuration': return <SolarConfigurationIntelligence />;
     case 'reports': return <ReportsPage />;
     case 'completed': return <CompletedPage />;
     default: return <SurveyDashboard onNavigate={onNavigate} />;

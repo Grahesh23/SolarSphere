@@ -6,6 +6,7 @@ import {
 import { useData } from '@/data/DataContext';
 import { useAuth } from '@/data/AuthContext';
 import { PortalLayout, PageContainer, PageHeader } from '@/components/layout/PortalLayout';
+import { RoofIntelligence } from '@/pages/RoofIntelligence';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Modal } from '@/components/ui/Modal';
 import { StatusBadgeAuto, AlertBanner } from '@/components/ui/Status';
@@ -32,6 +33,7 @@ function TechnicianPage({ active, onNavigate }) {
     case 'photos': return <PhotosPage />;
     case 'commissioning': return <CommissioningPage />;
     case 'completion': return <CompletionPage />;
+    case 'roof-intelligence': return <RoofIntelligence />;
     default: return <TechDashboard onNavigate={onNavigate} />;
   }
 }

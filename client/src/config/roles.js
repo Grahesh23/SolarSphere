@@ -18,10 +18,9 @@ const adminItems = [
   { key: 'projects', label: 'Project Management', icon: FolderKanban, group: 'Operations' },
   { key: 'surveys', label: 'Roof Survey Management', icon: ClipboardCheck, group: 'Operations' },
   { key: 'quotations', label: 'Quotations & BOM', icon: FileText, group: 'Operations' },
-  { key: 'roof-intelligence', label: 'Roof Intelligence', icon: Satellite, group: 'Intelligence Suite' },
-  { key: 'solar-configuration', label: 'Solar Configuration Intelligence', icon: SlidersHorizontal, group: 'Intelligence Suite' },
-  { key: 'predictive-intelligence', label: 'Predictive Intelligence', icon: TrendingUp, group: 'Intelligence Suite' },
-  { key: 'risk-intelligence', label: 'Installation Risk Intelligence', icon: AlertTriangle, group: 'Intelligence Suite' },
+  { key: 'predictive-intelligence', label: 'Predictive Analytics', icon: TrendingUp, group: 'Intelligence Suite' },
+  { key: 'risk-intelligence', label: 'Project Risk Overview', icon: AlertTriangle, group: 'Intelligence Suite' },
+  { key: 'analytics', label: 'Intelligence & Business Insights', icon: BarChart3, group: 'Intelligence Suite' },
   { key: 'inventory', label: 'Inventory Management', icon: Boxes, group: 'Management' },
   { key: 'qr-intelligence', label: 'QR Intelligence', icon: QrCode, group: 'Management' },
   { key: 'dispatch', label: 'Dispatch Management', icon: Truck, group: 'Management' },
@@ -31,7 +30,6 @@ const adminItems = [
   { key: 'service', label: 'Service & Complaints', icon: Headphones, group: 'Management' },
   { key: 'finance', label: 'Payments & Finance', icon: Wallet, group: 'Management' },
   { key: 'subsidy', label: 'Subsidy Management', icon: Landmark, group: 'Management' },
-  { key: 'analytics', label: 'Analytics & Reports', icon: BarChart3, group: 'Management' },
   { key: 'users', label: 'User & Role Management', icon: UserCog, group: 'Management' },
   { key: 'settings', label: 'System Settings', icon: Settings, group: 'Management' },
 ];
@@ -56,6 +54,7 @@ const surveyorItems = [
   { key: 'measurements', label: 'Roof Measurements', icon: MapPin, group: 'Surveys' },
   { key: 'upload', label: 'Roof Image Upload', icon: Image, group: 'Surveys' },
   { key: 'roof-intelligence', label: 'Roof Intelligence', icon: Satellite, group: 'Surveys' },
+  { key: 'solar-configuration', label: 'Roof Configuration Intelligence', icon: SlidersHorizontal, group: 'Surveys' },
   { key: 'reports', label: 'Survey Reports', icon: FileText, group: 'Surveys' },
   { key: 'completed', label: 'Completed Surveys', icon: CheckCircle2, group: 'Surveys' },
 ];
@@ -82,6 +81,7 @@ const technicianItems = [
   { key: 'photos', label: 'Photo Documentation', icon: Image, group: 'Jobs' },
   { key: 'commissioning', label: 'Testing & Commissioning', icon: CheckCircle2, group: 'Jobs' },
   { key: 'completion', label: 'Completion Reports', icon: FileText, group: 'Jobs' },
+  { key: 'roof-intelligence', label: 'Roof Intelligence', icon: Satellite, group: 'Jobs' },
 ];
 
 const serviceItems = [
